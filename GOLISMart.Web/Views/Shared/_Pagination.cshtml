@@ -1,0 +1,67 @@
+@* _Pagination.cshtml — Reusable pagination partial
+   ViewData required:
+     "CurrentPage" int
+     "TotalPages"  int
+     "RouteValues" Dictionary<string, string?> (base route values to merge)
+*@
+@using Microsoft.AspNetCore.Mvc.Rendering
+@{
+    int currentPage = (int)(ViewData["CurrentPage"] ?? 1);
+    int totalPages  = (int)(ViewData["TotalPages"]  ?? 1);
+    var baseRoute   = ViewData["RouteValues"] as Dictionary<string, string?> ?? new();
+
+    Dictionary<string, string?> PageRoute(int p)
+    {
+        var rv = new Dictionary<string, string?>(baseRoute);
+        rv["page"] = p.ToString();
+        return rv;
+    }
+
+    int start = Math.Max(1, currentPage - 2);
+    int end   = Math.Min(totalPages, currentPage + 2);
+}
+@if (totalPages > 1)
+{
+    <nav aria-label="Page navigation">
+        <ul class="pagination gm-pagination justify-content-center flex-wrap">
+            <li class="page-item @(currentPage <= 1 ? "disabled" : "")">
+                <a class="page-link" asp-all-route-data="@PageRoute(currentPage - 1)"
+                   aria-label="Previous">&laquo;</a>
+            </li>
+
+            @if (start > 1)
+            {
+                <li class="page-item">
+                    <a class="page-link" asp-all-route-data="@PageRoute(1)">1</a>
+                </li>
+                @if (start > 2)
+                {
+                    <li class="page-item disabled"><span class="page-link">…</span></li>
+                }
+            }
+
+            @for (int p = start; p <= end; p++)
+            {
+                <li class="page-item @(p == currentPage ? "active" : "")">
+                    <a class="page-link" asp-all-route-data="@PageRoute(p)">@p</a>
+                </li>
+            }
+
+            @if (end < totalPages)
+            {
+                @if (end < totalPages - 1)
+                {
+                    <li class="page-item disabled"><span class="page-link">…</span></li>
+                }
+                <li class="page-item">
+                    <a class="page-link" asp-all-route-data="@PageRoute(totalPages)">@totalPages</a>
+                </li>
+            }
+
+            <li class="page-item @(currentPage >= totalPages ? "disabled" : "")">
+                <a class="page-link" asp-all-route-data="@PageRoute(currentPage + 1)"
+                   aria-label="Next">&raquo;</a>
+            </li>
+        </ul>
+    </nav>
+}

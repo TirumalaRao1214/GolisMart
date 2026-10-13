@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/tests/">
+    <Project Path="tests/GOLISMart.API.Tests/GOLISMart.API.Tests.csproj" />
+    <Project Path="tests/GOLISMart.Web.Tests/GOLISMart.Web.Tests.csproj" />
+  </Folder>
+  <Project Path="GOLISMart.API/GOLISMart.API.csproj" />
+  <Project Path="GOLISMart.Web/GOLISMart.Web.csproj" />
+</Solution>

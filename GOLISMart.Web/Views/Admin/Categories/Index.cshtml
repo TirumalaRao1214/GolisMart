@@ -1,0 +1,67 @@
+@model AdminCategoryListViewModel
+@{
+    Layout = "~/Views/Admin/_AdminLayout.cshtml";
+    ViewData["Title"] = "Categories";
+}
+
+<div class="adm-page-header">
+    <h1>Categories</h1>
+    <a asp-controller="AdminCategories" asp-action="Create" class="btn btn-success btn-sm">+ New Category</a>
+</div>
+
+@if (!Model.ApiAvailable || Model.Categories is null)
+{
+    <div class="alert alert-warning">Could not load categories.</div>
+}
+else if (Model.Categories.Items.Count == 0)
+{
+    <div class="adm-card p-4 text-muted text-center">No categories found.</div>
+}
+else
+{
+    <div class="adm-card">
+        <div class="adm-table-responsive">
+            <table class="adm-table">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Name</th>
+                        <th>Slug</th>
+                        <th>Sort</th>
+                        <th>Products</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var c in Model.Categories.Items)
+                    {
+                        <tr>
+                            <td class="text-muted">@c.Id</td>
+                            <td><strong>@c.Name</strong></td>
+                            <td class="text-muted small">@c.Slug</td>
+                            <td>@c.SortOrder</td>
+                            <td>@c.ProductCount</td>
+                            <td>
+                                <span class="adm-badge @(c.IsActive ? "adm-badge-active" : "adm-badge-inactive")">
+                                    @(c.IsActive ? "Active" : "Inactive")
+                                </span>
+                            </td>
+                            <td class="d-flex gap-1 flex-wrap">
+                                <a asp-controller="AdminCategories" asp-action="Edit" asp-route-id="@c.Id"
+                                   class="btn btn-sm btn-outline-primary">Edit</a>
+                                <form asp-controller="AdminCategories" asp-action="ToggleActive" asp-route-id="@c.Id"
+                                      method="post">
+                                    @Html.AntiForgeryToken()
+                                    <button type="submit" class="btn btn-sm btn-outline-secondary">
+                                        @(c.IsActive ? "Disable" : "Enable")
+                                    </button>
+                                </form>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+}

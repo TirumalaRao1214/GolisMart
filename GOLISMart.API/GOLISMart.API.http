@@ -1,0 +1,6 @@
+@GOLISMart.API_HostAddress = http://localhost:5170
+
+GET {{GOLISMart.API_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

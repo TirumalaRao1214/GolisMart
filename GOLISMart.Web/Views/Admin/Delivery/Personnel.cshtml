@@ -1,0 +1,104 @@
+@model GOLISMart.Web.Models.AdminPersonnelListViewModel
+@{
+    ViewData["Title"] = "Delivery Personnel";
+    Layout = "~/Views/Admin/_AdminLayout.cshtml";
+}
+
+<div class="adm-page-header">
+    <h1>Delivery Personnel</h1>
+    <a href="/admin/delivery/personnel/create" class="btn btn-sm btn-primary">+ Add Personnel</a>
+</div>
+
+<form method="get" action="/admin/delivery/personnel" class="adm-card mb-4">
+    <div class="adm-card-header">Filters</div>
+    <div class="p-3 d-flex gap-2 flex-wrap">
+        <input type="text" name="search" value="@Model.Search"
+               class="form-control form-control-sm" style="max-width:220px;" placeholder="Name / Phone" />
+        <select name="isActive" class="form-select form-select-sm" style="max-width:140px;">
+            <option value="">All</option>
+            @if (Model.IsActive == true)
+            { <option value="true" selected="selected">Active</option> }
+            else
+            { <option value="true">Active</option> }
+            @if (Model.IsActive == false)
+            { <option value="false" selected="selected">Inactive</option> }
+            else
+            { <option value="false">Inactive</option> }
+        </select>
+        <button type="submit" class="btn btn-sm btn-primary">Filter</button>
+        <a href="/admin/delivery/personnel" class="btn btn-sm btn-outline-secondary">Clear</a>
+    </div>
+</form>
+
+@if (!Model.ApiAvailable)
+{
+    <div class="alert alert-warning">Unable to load personnel. Please try again.</div>
+}
+else if (Model.Personnel?.TotalCount == 0)
+{
+    <div class="adm-card">
+        <div class="p-4 text-center text-muted">No delivery personnel found.</div>
+    </div>
+}
+else
+{
+    <div class="adm-card">
+        <div class="adm-card-header">
+            Delivery Personnel
+            <span class="text-muted ms-2" style="font-weight:400;">@Model.Personnel!.TotalCount total</span>
+        </div>
+        <div class="adm-table-responsive">
+            <table class="adm-table">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Contact</th>
+                        <th>App Account</th>
+                        <th>Active Deliveries</th>
+                        <th>Status</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var p in Model.Personnel.Items)
+                    {
+                        <tr>
+                            <td class="fw-semibold small">@p.FullName</td>
+                            <td class="small text-muted">@p.ContactNumber</td>
+                            <td class="small text-muted">@(p.UserId is not null ? "Linked" : "None")</td>
+                            <td class="text-center">
+                                @if (p.ActiveAssignmentCount > 0)
+                                { <span class="adm-badge adm-badge-low">@p.ActiveAssignmentCount</span> }
+                                else
+                                { <span class="text-muted">0</span> }
+                            </td>
+                            <td>
+                                <span class="adm-badge adm-badge-@(p.IsActive ? "active" : "inactive")">
+                                    @(p.IsActive ? "Active" : "Inactive")
+                                </span>
+                            </td>
+                            <td>
+                                <a href="/admin/delivery/personnel/@p.Id/edit" class="btn btn-xs btn-outline-secondary"
+                                   style="font-size:12px;padding:2px 10px;">Edit</a>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    @if (Model.Personnel.TotalPages > 1)
+    {
+        <nav class="d-flex justify-content-center mt-3">
+            <ul class="pagination pagination-sm">
+                @for (int i = 1; i <= Model.Personnel.TotalPages; i++)
+                {
+                    <li class="page-item @(i == Model.Page ? "active" : "")">
+                        <a class="page-link" href="?page=@i&search=@Model.Search&isActive=@Model.IsActive">@i</a>
+                    </li>
+                }
+            </ul>
+        </nav>
+    }
+}

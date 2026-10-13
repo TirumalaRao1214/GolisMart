@@ -1,0 +1,6 @@
+﻿<svg xmlns="http://www.w3.org/2000/svg" width="300" height="300" viewBox="0 0 300 300">
+  <rect width="300" height="300" fill="#f0f4f0"/>
+  <circle cx="150" cy="120" r="50" fill="#c8e6c9"/>
+  <path d="M90 200 Q150 160 210 200 Q210 240 150 250 Q90 240 90 200Z" fill="#c8e6c9"/>
+  <text x="150" y="280" font-family="system-ui,sans-serif" font-size="12" fill="#6c757d" text-anchor="middle">Image coming soon</text>
+</svg>

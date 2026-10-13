@@ -1,0 +1,5 @@
+@model int
+@{
+    var count = Model;
+}
+<span id="gmCartBadge" class="gm-cart-badge @(count > 0 ? "gm-cart-badge--has-items" : "")" aria-label="@count item@(count != 1 ? "s" : "") in cart">@count</span>

@@ -1,0 +1,116 @@
+@model GOLISMart.Web.Models.AddressFormViewModel
+
+<!-- ── Automatic address detection ─────────────────────────────────────── -->
+<div class="mb-4">
+    <p class="text-muted small mb-2">
+        Click the button below to automatically detect your current location and
+        fill in the address fields. You can review and correct all fields before saving.
+    </p>
+    <button type="button"
+            id="locationPickerBtn"
+            class="btn btn-outline-primary"
+            aria-label="Detect my current location and fill address fields">
+        <span class="location-spinner spinner-border spinner-border-sm me-1"
+              role="status" aria-hidden="true" style="display:none;"></span>
+        <span class="location-btn-text">&#x1F4CD; Use My Current Location</span>
+    </button>
+    <div id="locationStatusMsg" class="alert mt-2" role="alert" style="display:none;"></div>
+    <p class="text-muted small mt-2 mb-0">
+        <strong>Note:</strong> Detected address is a suggestion only.
+        Please verify and complete all required fields.
+    </p>
+</div>
+<!-- ── End automatic address detection ──────────────────────────────────── -->
+
+<div class="row g-3">
+    <div class="col-12 col-sm-6">
+        <label asp-for="RecipientName" class="form-label fw-semibold"></label>
+        <input asp-for="RecipientName" class="form-control" autocomplete="name" placeholder="Full name of recipient" />
+        <span asp-validation-for="RecipientName" class="text-danger small"></span>
+    </div>
+
+    <div class="col-12 col-sm-6">
+        <label asp-for="RecipientMobile" class="form-label fw-semibold"></label>
+        <div class="input-group">
+            <span class="input-group-text">+91</span>
+            <input asp-for="RecipientMobile" class="form-control" autocomplete="tel"
+                   type="tel" inputmode="numeric" maxlength="13" placeholder="9876543210" />
+        </div>
+        <span asp-validation-for="RecipientMobile" class="text-danger small"></span>
+    </div>
+
+    <div class="col-12 col-sm-6">
+        <label asp-for="AddressLabel" class="form-label fw-semibold"></label>
+        <select asp-for="AddressLabel" class="form-select">
+            <option value="Home">🏠 Home</option>
+            <option value="Work">🏢 Work</option>
+            <option value="Other">📍 Other</option>
+        </select>
+        <span asp-validation-for="AddressLabel" class="text-danger small"></span>
+    </div>
+
+    <div class="col-12 col-sm-6">
+        <label asp-for="HouseNumber" class="form-label fw-semibold"></label>
+        <input asp-for="HouseNumber" class="form-control" autocomplete="address-line1"
+               placeholder="e.g. 12A, Flat 201" />
+        <span asp-validation-for="HouseNumber" class="text-danger small"></span>
+    </div>
+
+    <div class="col-12">
+        <label asp-for="BuildingStreet" class="form-label fw-semibold"></label>
+        <input asp-for="BuildingStreet" class="form-control" autocomplete="address-line2"
+               placeholder="Building name, road name" />
+        <span asp-validation-for="BuildingStreet" class="text-danger small"></span>
+    </div>
+
+    <div class="col-12 col-sm-6">
+        <label asp-for="Locality" class="form-label fw-semibold"></label>
+        <input asp-for="Locality" class="form-control" autocomplete="address-level3"
+               placeholder="Area or colony name" />
+        <span asp-validation-for="Locality" class="text-danger small"></span>
+    </div>
+
+    <div class="col-12 col-sm-6">
+        <label asp-for="Landmark" class="form-label fw-semibold"></label>
+        <input asp-for="Landmark" class="form-control" placeholder="Near school, landmark etc." />
+        <span asp-validation-for="Landmark" class="text-danger small"></span>
+    </div>
+
+    <div class="col-12 col-sm-6">
+        <label asp-for="City" class="form-label fw-semibold"></label>
+        <input asp-for="City" class="form-control" autocomplete="address-level2" placeholder="City" />
+        <span asp-validation-for="City" class="text-danger small"></span>
+    </div>
+
+    <div class="col-12 col-sm-4">
+        <label asp-for="State" class="form-label fw-semibold"></label>
+        <input asp-for="State" class="form-control" autocomplete="address-level1" placeholder="State" />
+        <span asp-validation-for="State" class="text-danger small"></span>
+    </div>
+
+    <div class="col-12 col-sm-2">
+        <label asp-for="Pincode" class="form-label fw-semibold"></label>
+        <input asp-for="Pincode" class="form-control" autocomplete="postal-code"
+               type="text" inputmode="numeric" maxlength="6" placeholder="6 digits" />
+        <span asp-validation-for="Pincode" class="text-danger small"></span>
+    </div>
+
+    <div class="col-12">
+        <label asp-for="DeliveryInstructions" class="form-label fw-semibold"></label>
+        <textarea asp-for="DeliveryInstructions" class="form-control" rows="2"
+                  placeholder="e.g. Ring doorbell twice, leave at gate…"></textarea>
+        <span asp-validation-for="DeliveryInstructions" class="text-danger small"></span>
+    </div>
+
+    <div class="col-12">
+        <div class="form-check">
+            <input asp-for="IsDefault" class="form-check-input" type="checkbox" />
+            <label asp-for="IsDefault" class="form-check-label fw-semibold">Set as my default address</label>
+        </div>
+    </div>
+
+    <div class="col-12 d-flex gap-2 pt-2">
+        <button type="submit" class="btn btn-success px-4">Save Address</button>
+        <a asp-controller="Account" asp-action="Addresses" class="btn btn-outline-secondary px-4">Cancel</a>
+    </div>
+</div>

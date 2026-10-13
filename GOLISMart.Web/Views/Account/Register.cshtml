@@ -1,0 +1,109 @@
+@model GOLISMart.Web.Models.RegisterViewModel
+@{
+    ViewData["Title"] = "Create Account";
+}
+
+<div class="container py-5">
+    <div class="row justify-content-center">
+        <div class="col-12 col-md-8 col-lg-6">
+            <div class="card shadow-sm border-0">
+                <div class="card-body p-4">
+                    <h1 class="h4 mb-1 text-center fw-bold">Create your account</h1>
+                    <p class="text-muted text-center small mb-4">Join GOLIS Mart for fast grocery delivery</p>
+
+                    @if (!string.IsNullOrEmpty(Model.ErrorMessage))
+                    {
+                        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                            @Model.ErrorMessage
+                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                        </div>
+                    }
+
+                    <form asp-controller="Account" asp-action="Register" method="post" data-ajax-form="true" novalidate>
+
+                        <div class="mb-3">
+                            <label asp-for="FullName" class="form-label fw-semibold"></label>
+                            <input asp-for="FullName" class="form-control" placeholder="e.g. Priya Sharma"
+                                   autocomplete="name" autofocus />
+                            <span asp-validation-for="FullName" class="text-danger small"></span>
+                        </div>
+
+                        <div class="mb-3">
+                            <label asp-for="Email" class="form-label fw-semibold"></label>
+                            <input asp-for="Email" class="form-control" placeholder="you@example.com"
+                                   autocomplete="email" type="email" />
+                            <span asp-validation-for="Email" class="text-danger small"></span>
+                        </div>
+
+                        <div class="mb-3">
+                            <label asp-for="Mobile" class="form-label fw-semibold"></label>
+                            <div class="input-group">
+                                <span class="input-group-text">+91</span>
+                                <input asp-for="Mobile" class="form-control" placeholder="9876543210"
+                                       autocomplete="tel" type="tel" inputmode="numeric" maxlength="10" />
+                            </div>
+                            <span asp-validation-for="Mobile" class="text-danger small"></span>
+                            <div class="form-text">10-digit Indian mobile number</div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label asp-for="Password" class="form-label fw-semibold"></label>
+                            <div class="input-group">
+                                <input asp-for="Password" class="form-control" placeholder="Minimum 8 characters"
+                                       autocomplete="new-password" id="passwordInput" />
+                                <button class="btn btn-outline-secondary" type="button" id="togglePassword"
+                                        aria-label="Toggle password visibility">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+                                    </svg>
+                                </button>
+                            </div>
+                            <span asp-validation-for="Password" class="text-danger small"></span>
+                            <div class="form-text">8+ chars, upper &amp; lowercase, digit, and special character</div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label asp-for="ConfirmPassword" class="form-label fw-semibold"></label>
+                            <input asp-for="ConfirmPassword" class="form-control" placeholder="Re-enter password"
+                                   autocomplete="new-password" />
+                            <span asp-validation-for="ConfirmPassword" class="text-danger small"></span>
+                        </div>
+
+                        <div class="mb-4">
+                            <div class="form-check">
+                                <input asp-for="AcceptTerms" class="form-check-input" type="checkbox" />
+                                <label asp-for="AcceptTerms" class="form-check-label">
+                                    I accept the <a href="#" class="text-success">Terms of Service</a>
+                                    and <a href="#" class="text-success">Privacy Policy</a>
+                                </label>
+                            </div>
+                            <span asp-validation-for="AcceptTerms" class="text-danger small d-block"></span>
+                        </div>
+
+                        <button type="submit" class="btn btn-success w-100 py-2 fw-semibold">
+                            Create Account
+                        </button>
+                    </form>
+
+                    <hr class="my-4" />
+                    <p class="text-center mb-0 small">
+                        Already have an account?
+                        <a asp-controller="Account" asp-action="Login" class="text-success fw-semibold">Sign in</a>
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+    <script>
+        document.getElementById('togglePassword')?.addEventListener('click', function () {
+            const input = document.getElementById('passwordInput');
+            if (input) {
+                input.type = input.type === 'password' ? 'text' : 'password';
+            }
+        });
+    </script>
+}

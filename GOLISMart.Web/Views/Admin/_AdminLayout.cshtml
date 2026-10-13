@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@(ViewData["Title"] != null ? ViewData["Title"] + " — Admin" : "Admin — GOLIS Mart")</title>
+    <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
+    <style>
+        :root {
+            --adm-sidebar-w: 240px;
+            --adm-sidebar-bg: #1a1d23;
+            --adm-sidebar-hover: #2a2d35;
+            --adm-sidebar-active: #2e7d32;
+            --adm-topbar-h: 56px;
+            --adm-text-muted: #9ca3af;
+            --adm-border: #2e3138;
+            --adm-brand: #2e7d32;
+            --adm-brand-hover: #1b5e20;
+        }
+        *, *::before, *::after { box-sizing: border-box; }
+        body { margin: 0; font-family: -apple-system, "Segoe UI", system-ui, sans-serif; font-size: 14px; background: #f3f4f6; color: #1f2328; }
+
+        /* ── Sidebar ─────────────────────────────────────────────────── */
+        .adm-sidebar {
+            position: fixed; top: 0; left: 0; bottom: 0;
+            width: var(--adm-sidebar-w);
+            background: var(--adm-sidebar-bg);
+            display: flex; flex-direction: column;
+            z-index: 1040; overflow-y: auto;
+        }
+        .adm-sidebar-brand {
+            display: flex; align-items: center; gap: 10px;
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--adm-border);
+            color: #fff; text-decoration: none;
+            font-weight: 700; font-size: 15px;
+        }
+        .adm-sidebar-brand svg { width: 22px; height: 22px; flex-shrink: 0; }
+        .adm-sidebar-brand:hover { color: #a7f3a7; }
+        .adm-nav { list-style: none; margin: 0; padding: 8px 0; flex: 1; }
+        .adm-nav-item a {
+            display: flex; align-items: center; gap: 10px;
+            padding: 10px 20px;
+            color: var(--adm-text-muted); text-decoration: none;
+            font-size: 13.5px; border-radius: 0;
+            transition: background .15s, color .15s;
+        }
+        .adm-nav-item a:hover { background: var(--adm-sidebar-hover); color: #e5e7eb; }
+        .adm-nav-item a.active { background: var(--adm-sidebar-active); color: #fff; font-weight: 600; }
+        .adm-nav-item a svg { width: 16px; height: 16px; flex-shrink: 0; }
+        .adm-nav-section {
+            font-size: 11px; font-weight: 600; letter-spacing: .06em;
+            color: #4b5563; text-transform: uppercase;
+            padding: 14px 20px 4px;
+        }
+
+        /* ── Top bar ─────────────────────────────────────────────────── */
+        .adm-topbar {
+            position: fixed; top: 0; left: var(--adm-sidebar-w); right: 0;
+            height: var(--adm-topbar-h);
+            background: #fff; border-bottom: 1px solid #e5e7eb;
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 0 24px; z-index: 1030;
+        }
+        .adm-topbar-title { font-size: 16px; font-weight: 600; color: #111827; }
+        .adm-user-menu { display: flex; align-items: center; gap: 8px; }
+        .adm-user-menu .dropdown-toggle {
+            background: none; border: 1px solid #e5e7eb; border-radius: 6px;
+            padding: 6px 14px; font-size: 13px; cursor: pointer;
+            display: flex; align-items: center; gap: 8px;
+            color: #374151; font-weight: 500;
+        }
+        .adm-user-menu .dropdown-toggle:hover { background: #f9fafb; border-color: #d1d5db; }
+
+        /* ── Main content ────────────────────────────────────────────── */
+        .adm-main {
+            margin-left: var(--adm-sidebar-w);
+            padding-top: var(--adm-topbar-h);
+            min-height: 100vh;
+        }
+        .adm-content { padding: 28px 28px 48px; }
+        .adm-page-header {
+            display: flex; align-items: center; justify-content: space-between;
+            margin-bottom: 24px;
+        }
+        .adm-page-header h1 { font-size: 20px; font-weight: 700; margin: 0; color: #111827; }
+
+        /* ── Cards / stat boxes ──────────────────────────────────────── */
+        .adm-stat-card {
+            background: #fff; border: 1px solid #e5e7eb; border-radius: 10px;
+            padding: 20px 22px; height: 100%;
+            display: flex; flex-direction: column; justify-content: space-between;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+            transition: box-shadow .15s ease, transform .15s ease;
+        }
+        .adm-stat-card:hover {
+            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.08);
+        }
+        .adm-stat-card .stat-label { font-size: 12px; color: #6b7280; font-weight: 600; text-transform: uppercase; letter-spacing:.05em; }
+        .adm-stat-card .stat-value { font-size: 26px; font-weight: 700; color: #111827; margin-top: 4px; line-height: 1.2; }
+        .adm-stat-card .stat-sub { font-size: 12px; color: #6b7280; margin-top: 6px; }
+
+        /* ── Tables ──────────────────────────────────────────────────── */
+        .adm-card {
+            background: #fff; border: 1px solid #e5e7eb; border-radius: 10px;
+            overflow: hidden; margin-bottom: 24px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+        }
+        .adm-card-header {
+            padding: 14px 20px; border-bottom: 1px solid #f3f4f6;
+            display: flex; align-items: center; justify-content: space-between;
+            font-weight: 600; font-size: 14px; color: #374151; background: #fff;
+        }
+        .adm-table-responsive { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+        .adm-table { width: 100%; border-collapse: collapse; font-size: 13.5px; margin-bottom: 0; }
+        .adm-table th { background: #f9fafb; font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing:.04em; color: #6b7280; padding: 12px 18px; border-bottom: 1px solid #e5e7eb; white-space: nowrap; }
+        .adm-table td { padding: 12px 18px; border-bottom: 1px solid #f3f4f6; vertical-align: middle; color: #374151; }
+        .adm-table tr:last-child td { border-bottom: none; }
+        .adm-table tbody tr:hover { background: #fafbfc; }
+
+        /* ── Status badges ───────────────────────────────────────────── */
+        .adm-badge { display: inline-flex; align-items: center; padding: 3px 10px; border-radius: 20px; font-size: 11.5px; font-weight: 600; line-height: 1.2; text-transform: capitalize; }
+        .adm-badge-pending          { background: #fef3c7; color: #92400e; }
+        .adm-badge-confirmed        { background: #dbeafe; color: #1e40af; }
+        .adm-badge-preparing        { background: #ede9fe; color: #5b21b6; }
+        .adm-badge-out_for_delivery,
+        .adm-badge-outfordelivery   { background: #e0e7ff; color: #3730a3; }
+        .adm-badge-delivered        { background: #d1fae5; color: #065f46; }
+        .adm-badge-cancelled        { background: #fee2e2; color: #991b1b; }
+        .adm-badge-active           { background: #d1fae5; color: #065f46; }
+        .adm-badge-inactive         { background: #f3f4f6; color: #6b7280; }
+        .adm-badge-paid             { background: #d1fae5; color: #065f46; }
+        .adm-badge-unpaid           { background: #fee2e2; color: #991b1b; }
+        .adm-badge-failed           { background: #fee2e2; color: #991b1b; }
+        .adm-badge-refunded         { background: #f3f4f6; color: #374151; }
+        .adm-badge-low              { background: #fef3c7; color: #92400e; }
+
+        /* ── Forms ───────────────────────────────────────────────────── */
+        .adm-form-section { background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; padding: 24px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
+        .adm-form-section legend { font-weight: 600; font-size: 14px; color: #374151; }
+
+        /* ── Responsive: collapse sidebar on small screens ───────────── */
+        @@media (max-width: 768px) {
+            .adm-sidebar { transform: translateX(-100%); transition: transform .25s ease; }
+            .adm-sidebar.open { transform: translateX(0); }
+            .adm-topbar { left: 0; }
+            .adm-main { margin-left: 0; }
+        }
+    </style>
+</head>
+<body>
+
+<!-- Sidebar -->
+<aside class="adm-sidebar" id="admSidebar">
+    <a asp-controller="AdminDashboard" asp-action="Dashboard" class="adm-sidebar-brand" data-no-spa="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/>
+            <line x1="3" y1="6" x2="21" y2="6"/>
+            <path d="M16 10a4 4 0 01-8 0"/>
+        </svg>
+        <span>GOLIS Mart Admin</span>
+    </a>
+    <ul class="adm-nav">
+        <li class="adm-nav-section">Main</li>
+        <li class="adm-nav-item">
+            <a asp-controller="AdminDashboard" asp-action="Dashboard" data-no-spa="true"
+               class="@(ViewContext.RouteData.Values["controller"]?.ToString() == "AdminDashboard" ? "active" : "")">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+                Dashboard
+            </a>
+        </li>
+        <li class="adm-nav-section">Catalogue</li>
+        <li class="adm-nav-item">
+            <a asp-controller="AdminProducts" asp-action="Index" data-no-spa="true"
+               class="@(ViewContext.RouteData.Values["controller"]?.ToString() == "AdminProducts" ? "active" : "")">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/></svg>
+                Products
+            </a>
+        </li>
+        <li class="adm-nav-item">
+            <a asp-controller="AdminCategories" asp-action="Index" data-no-spa="true"
+               class="@(ViewContext.RouteData.Values["controller"]?.ToString() == "AdminCategories" ? "active" : "")">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h7"/></svg>
+                Categories
+            </a>
+        </li>
+        <li class="adm-nav-item">
+            <a asp-controller="AdminInventory" asp-action="Index" data-no-spa="true"
+               class="@(ViewContext.RouteData.Values["controller"]?.ToString() == "AdminInventory" ? "active" : "")">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+                Inventory
+            </a>
+        </li>
+        <li class="adm-nav-section">Operations</li>
+        <li class="adm-nav-item">
+            <a asp-controller="AdminOrders" asp-action="Index" data-no-spa="true"
+               class="@(ViewContext.RouteData.Values["controller"]?.ToString() == "AdminOrders" ? "active" : "")">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+                Orders
+            </a>
+        </li>
+        <li class="adm-nav-item">
+            <a asp-controller="AdminDelivery" asp-action="Index" data-no-spa="true"
+               class="@(ViewContext.RouteData.Values["controller"]?.ToString() == "AdminDelivery" ? "active" : "")">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/>
+                    <circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/>
+                </svg>
+                Delivery
+            </a>
+        </li>
+        <li class="adm-nav-item">
+            <a asp-controller="AdminReports" asp-action="Index" data-no-spa="true"
+               class="@(ViewContext.RouteData.Values["controller"]?.ToString() == "AdminReports" ? "active" : "")">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>
+                </svg>
+                Reports & Analytics
+            </a>
+        </li>
+        <li class="adm-nav-section">Config</li>
+        <li class="adm-nav-item">
+            <a asp-controller="AdminSettings" asp-action="Index" data-no-spa="true"
+               class="@(ViewContext.RouteData.Values["controller"]?.ToString() == "AdminSettings" ? "active" : "")">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+                Settings
+            </a>
+        </li>
+        <li class="adm-nav-section" style="margin-top:auto;"></li>
+        <li class="adm-nav-item">
+            <a asp-controller="Home" asp-action="Index" target="_blank" data-no-spa="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                View Storefront
+            </a>
+        </li>
+    </ul>
+</aside>
+
+<!-- Top bar -->
+<header class="adm-topbar">
+    <div class="d-flex align-items-center gap-3">
+        <button class="btn btn-sm btn-light d-md-none" id="admSidebarToggle" aria-label="Toggle sidebar">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+        </button>
+        <span class="adm-topbar-title">@(ViewData["Title"] ?? "Admin")</span>
+    </div>
+    <div class="adm-user-menu">
+        <div class="dropdown">
+            <button class="dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                @(User.Identity?.Name?.Split(' ')[0] ?? "Admin")
+            </button>
+            <ul class="dropdown-menu dropdown-menu-end shadow-sm border-0">
+                <li><a class="dropdown-item" asp-controller="Home" asp-action="Index" target="_blank" data-no-spa="true">View Storefront</a></li>
+                <li><a class="dropdown-item" asp-controller="Account" asp-action="Overview" data-no-spa="true">My Account</a></li>
+                <li><hr class="dropdown-divider"></li>
+                <li>
+                    <form asp-controller="Account" asp-action="Logout" method="post" data-no-spa="true">
+                        @Html.AntiForgeryToken()
+                        <button type="submit" class="dropdown-item text-danger">Sign Out</button>
+                    </form>
+                </li>
+            </ul>
+        </div>
+    </div>
+</header>
+
+<!-- Main -->
+<main class="adm-main">
+    <div class="adm-content">
+        @if (TempData["SuccessMessage"] is string ok)
+        {
+            <div class="alert alert-success alert-dismissible fade show" role="alert">
+                @ok <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+        }
+        @if (TempData["ErrorMessage"] is string err)
+        {
+            <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                @err <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+        }
+        @RenderBody()
+    </div>
+</main>
+
+<script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+    document.getElementById('admSidebarToggle')?.addEventListener('click', () =>
+        document.getElementById('admSidebar')?.classList.toggle('open'));
+</script>
+@await RenderSectionAsync("Scripts", required: false)
+</body>
+</html>

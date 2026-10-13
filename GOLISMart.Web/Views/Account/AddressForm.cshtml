@@ -1,0 +1,53 @@
+@model GOLISMart.Web.Models.AddressFormViewModel
+@{
+    var isEdit = Model.AddressId.HasValue;
+    ViewData["Title"] = isEdit ? "Edit Address" : "Add Address";
+}
+
+<div class="container py-4">
+    <div class="row">
+        <div class="col-12 col-md-3 mb-4">
+            <div class="list-group shadow-sm">
+                <a asp-controller="Account" asp-action="Overview" class="list-group-item list-group-item-action">My Account</a>
+                <a asp-controller="Account" asp-action="EditProfile" class="list-group-item list-group-item-action">Edit Profile</a>
+                <a asp-controller="Account" asp-action="ChangePassword" class="list-group-item list-group-item-action">Change Password</a>
+                <a asp-controller="Account" asp-action="Addresses" class="list-group-item list-group-item-action active fw-semibold">Saved Addresses</a>
+            </div>
+        </div>
+
+        <div class="col-12 col-md-9">
+            <div class="d-flex align-items-center gap-2 mb-4">
+                <a asp-controller="Account" asp-action="Addresses" class="btn btn-sm btn-outline-secondary">← Back</a>
+                <h1 class="h4 fw-bold mb-0">@ViewData["Title"]</h1>
+            </div>
+
+            @if (!string.IsNullOrEmpty(Model.ErrorMessage))
+            {
+                <div class="alert alert-danger" role="alert">@Model.ErrorMessage</div>
+            }
+
+            <div class="card shadow-sm border-0">
+                <div class="card-body p-4">
+                    @if (isEdit)
+                    {
+                        <form asp-controller="Account" asp-action="EditAddress"
+                              asp-route-id="@Model.AddressId" method="post" novalidate>
+                            @await Html.PartialAsync("_AddressFields", Model)
+                        </form>
+                    }
+                    else
+                    {
+                        <form asp-controller="Account" asp-action="AddAddress" method="post" novalidate>
+                            @await Html.PartialAsync("_AddressFields", Model)
+                        </form>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+    <script src="~/js/location-picker.js" asp-append-version="true"></script>
+}

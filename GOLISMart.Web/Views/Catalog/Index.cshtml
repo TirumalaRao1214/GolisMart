@@ -1,0 +1,99 @@
+@model GOLISMart.Web.Models.ProductListViewModel
+@{
+    var catName = ViewData["CategoryName"] as string;
+    ViewData["Title"] = catName ?? (string.IsNullOrEmpty(Model.SearchQuery) ? "Shop All Products" : $"Search: {Model.SearchQuery}");
+    var totalPages  = Model.Products?.TotalPages ?? 0;
+    var currentPage = Model.Products?.Page ?? 1;
+
+    // Build route values to preserve filters across pagination (string values only for asp-all-route-data)
+    var routeValues = new Dictionary<string, string?>();
+    if (!string.IsNullOrEmpty(Model.SearchQuery))    routeValues["search"]    = Model.SearchQuery;
+    if (!string.IsNullOrEmpty(Model.SelectedCategory)) routeValues["category"] = Model.SelectedCategory;
+    if (!string.IsNullOrEmpty(Model.SortBy))         routeValues["sortBy"]    = Model.SortBy;
+    if (!string.IsNullOrEmpty(Model.SortOrder))      routeValues["sortOrder"] = Model.SortOrder;
+    if (Model.InStock.HasValue)                      routeValues["inStock"]   = Model.InStock.Value.ToString().ToLower();
+
+    ViewData["CurrentPage"] = currentPage;
+    ViewData["TotalPages"]  = totalPages;
+    ViewData["RouteValues"] = routeValues;
+}
+
+@if (!Model.ApiAvailable)
+{
+    @await Html.PartialAsync("_ApiError")
+}
+else
+{
+    <div class="container py-4">
+        @* Breadcrumb *@
+        <nav aria-label="breadcrumb" class="mb-3">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a asp-controller="Home" asp-action="Index">Home</a></li>
+                @if (!string.IsNullOrEmpty(catName))
+                {
+                    <li class="breadcrumb-item active" aria-current="page">@catName</li>
+                }
+                else
+                {
+                    <li class="breadcrumb-item active" aria-current="page">
+                        @(string.IsNullOrEmpty(Model.SearchQuery) ? "All Products" : $"Search: {Model.SearchQuery}")
+                    </li>
+                }
+            </ol>
+        </nav>
+
+        <div class="row g-4">
+            @* ── Sidebar filters ───────────────────────────────────────── *@
+            <div class="col-12 col-md-3 col-lg-2">
+                <div class="gm-filter-sidebar sticky-top" style="top:calc(var(--gm-header-total) + 16px)">
+                    <div class="gm-filter-title">Categories</div>
+                    <nav>
+                        <a asp-controller="Catalog" asp-action="Index"
+                           asp-route-search="@Model.SearchQuery"
+                           asp-route-sortBy="@Model.SortBy"
+                           asp-route-sortOrder="@Model.SortOrder"
+                           class="gm-filter-link @(string.IsNullOrEmpty(Model.SelectedCategory) ? "active" : "")">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+                            All Products
+                        </a>
+                        @foreach (var cat in Model.Categories)
+                        {
+                            <a asp-controller="Catalog" asp-action="Index"
+                               asp-route-category="@cat.Slug"
+                               asp-route-search="@Model.SearchQuery"
+                               asp-route-sortBy="@Model.SortBy"
+                               asp-route-sortOrder="@Model.SortOrder"
+                               class="gm-filter-link @(Model.SelectedCategory == cat.Slug ? "active" : "")">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+                                @cat.Name
+                            </a>
+                        }
+                    </nav>
+
+                    <hr class="my-3" style="border-color:var(--gm-border);" />
+
+                    <div class="gm-filter-title">Availability</div>
+                    @{
+                        var inStockLink = new Dictionary<string, string?>(routeValues);
+                        if (Model.InStock == true)
+                            inStockLink.Remove("inStock");
+                        else
+                            inStockLink["inStock"] = "true";
+                        inStockLink["page"] = "1";
+                    }
+                    <a asp-controller="Catalog" asp-action="Index"
+                       asp-all-route-data="@inStockLink"
+                       class="gm-filter-link @(Model.InStock == true ? "active" : "")">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                        In stock only
+                    </a>
+                </div>
+            </div>
+
+            @* ── Product grid ─────────────────────────────────────────── *@
+            <div class="col-12 col-md-9 col-lg-10" id="gm-product-grid-container">
+                @await Html.PartialAsync("_ProductGrid", Model)
+            </div>
+        </div>
+    </div>
+}

@@ -1,0 +1,59 @@
+@model GOLISMart.Web.Services.AddressDto
+
+<div class="col-12 col-lg-6 gm-address-card-col" id="address-card-@Model.Id">
+    <div class="card shadow-sm border-0 h-100 @(Model.IsDefault ? "border-success border" : "")">
+        <div class="card-header bg-success text-white small py-1 px-3 fw-semibold @(Model.IsDefault ? "" : "d-none")" id="default-badge-@Model.Id">
+            ✓ Default Address
+        </div>
+        <div class="card-body">
+            <div class="d-flex justify-content-between align-items-start mb-2">
+                <div>
+                    <span class="badge @(Model.AddressLabel == "Home" ? "bg-success" : Model.AddressLabel == "Work" ? "bg-primary" : "bg-secondary") me-2">
+                        @Model.AddressLabel
+                    </span>
+                    <strong>@Model.RecipientName</strong>
+                </div>
+            </div>
+            <p class="mb-1 text-muted small">@Model.RecipientMobile</p>
+            <p class="mb-1 small">
+                @Model.HouseNumber, @Model.BuildingStreet,<br />
+                @Model.Locality,
+                @if (!string.IsNullOrEmpty(Model.Landmark))
+                {
+                    @: near @Model.Landmark,
+                }
+                <br />@Model.City — @Model.Pincode, @Model.State
+            </p>
+            @if (!string.IsNullOrEmpty(Model.DeliveryInstructions))
+            {
+                <p class="mb-0 small text-muted"><em>@Model.DeliveryInstructions</em></p>
+            }
+        </div>
+        <div class="card-footer bg-white border-top d-flex flex-wrap gap-2">
+            <a asp-controller="Account" asp-action="EditAddress"
+               asp-route-id="@Model.Id"
+               class="btn btn-sm btn-outline-secondary gm-spa-link">Edit</a>
+
+            <form asp-controller="Account" asp-action="SetDefaultAddress"
+                  asp-route-id="@Model.Id" method="post"
+                  class="d-inline gm-set-default-form @(Model.IsDefault ? "d-none" : "")"
+                  id="set-default-form-@Model.Id">
+                @Html.AntiForgeryToken()
+                <button type="submit" class="btn btn-sm btn-outline-success">
+                    Set Default
+                </button>
+            </form>
+
+            <form asp-controller="Account" asp-action="DeleteAddress"
+                  asp-route-id="@Model.Id" method="post"
+                  class="d-inline gm-delete-address-form @(Model.IsDefault ? "d-none" : "")"
+                  id="delete-form-@Model.Id"
+                  data-confirm="Are you sure you want to remove this address?">
+                @Html.AntiForgeryToken()
+                <button type="submit" class="btn btn-sm btn-outline-danger">
+                    Remove
+                </button>
+            </form>
+        </div>
+    </div>
+</div>

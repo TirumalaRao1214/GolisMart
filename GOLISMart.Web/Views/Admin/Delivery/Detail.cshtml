@@ -1,0 +1,248 @@
+@model GOLISMart.Web.Models.AdminDeliveryDetailViewModel
+@using GOLISMart.Web.Services
+@{
+    Layout = "~/Views/Admin/_AdminLayout.cshtml";
+    var order = Model.Order;
+    ViewData["Title"] = order is null ? "Delivery Detail" : $"Delivery: {order.OrderNumber}";
+}
+
+@if (!Model.ApiAvailable || order is null)
+{
+    <div class="alert alert-warning">Unable to load order details.</div>
+}
+else
+{
+    <div class="adm-page-header">
+        <div>
+            <a href="/admin/delivery" class="small text-muted text-decoration-none">← Delivery Management</a>
+            <h1 class="mt-1">@order.OrderNumber</h1>
+        </div>
+        <span class="adm-badge adm-badge-@GetStatusClass(order.Status) fs-6">@GetStatusLabel(order.Status)</span>
+    </div>
+
+    <div class="row g-3">
+        @* ── Main column ─────────────────────────────────────────────────────────── *@
+        <div class="col-12 col-lg-8">
+
+            @* Customer + address *@
+            <div class="adm-card mb-3">
+                <div class="adm-card-header">Customer & Delivery Address</div>
+                <div class="p-3 row g-3 small">
+                    <div class="col-6">
+                        <div class="text-muted">Name</div>
+                        <div class="fw-semibold">@order.CustomerName</div>
+                    </div>
+                    <div class="col-6">
+                        <div class="text-muted">Email</div>
+                        <div>@order.CustomerEmail</div>
+                    </div>
+                    <div class="col-6">
+                        <div class="text-muted">Phone</div>
+                        <div>@(string.IsNullOrEmpty(order.CustomerPhone) ? "—" : order.CustomerPhone)</div>
+                    </div>
+                    <div class="col-6">
+                        <div class="text-muted">Postcode</div>
+                        <div>@order.ShipToPincode</div>
+                    </div>
+                    <div class="col-12">
+                        <div class="text-muted">Delivery Address</div>
+                        <div>
+                            @order.ShipToAddressLine1
+                            @if (!string.IsNullOrEmpty(order.ShipToAddressLine2))
+                            { <span>, @order.ShipToAddressLine2</span> }
+                            , @order.ShipToCity — @order.ShipToPincode, @order.ShipToState
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            @* Order financials *@
+            <div class="adm-card mb-3">
+                <div class="adm-card-header">Order Summary</div>
+                <div class="p-3 row g-3 small">
+                    <div class="col-4"><div class="text-muted">Payment</div><div>@order.PaymentMethod</div></div>
+                    <div class="col-4"><div class="text-muted">Payment Status</div>
+                        <span class="adm-badge adm-badge-@order.PaymentStatus.ToLower()">@order.PaymentStatus</span>
+                    </div>
+                    <div class="col-4"><div class="text-muted">Total</div><div class="fw-bold">₹@order.TotalAmount.ToString("N2")</div></div>
+                    @if (order.Notes is not null)
+                    {
+                        <div class="col-12"><div class="text-muted">Notes</div><div>@order.Notes</div></div>
+                    }
+                </div>
+            </div>
+
+            @* Items *@
+            <div class="adm-card mb-3">
+                <div class="adm-card-header">Items (@order.Items.Count)</div>
+                <div class="adm-table-responsive">
+                    <table class="adm-table">
+                        <thead><tr><th>Product</th><th>Qty</th><th class="text-end">Line Total</th></tr></thead>
+                        <tbody>
+                            @foreach (var item in order.Items)
+                            {
+                                <tr>
+                                    <td>
+                                        <div class="fw-semibold small">@item.ProductName</div>
+                                        <div class="text-muted small">@item.UnitLabel · @item.ProductSKU</div>
+                                    </td>
+                                    <td class="small">@item.Quantity.ToString("G29")</td>
+                                    <td class="text-end small fw-semibold">₹@item.LineTotal.ToString("N2")</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            @* Status history *@
+            <div class="adm-card mb-3">
+                <div class="adm-card-header">Status History</div>
+                <div class="p-3">
+                    @foreach (var h in order.StatusHistory)
+                    {
+                        <div class="d-flex align-items-start gap-2 mb-2 pb-2 border-bottom">
+                            <span class="adm-badge adm-badge-@GetStatusClass(h.Status)" style="min-width:100px;">
+                                @GetStatusLabel(h.Status)
+                            </span>
+                            <div class="flex-grow-1 small">
+                                @if (!string.IsNullOrEmpty(h.Notes))
+                                { <div>@h.Notes</div> }
+                                <div class="text-muted">@h.ChangedAt.ToString("dd MMM yyyy, h:mm tt") UTC</div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+
+            @* Assignment history *@
+            @if (order.AssignmentHistory?.Count > 0)
+            {
+                <div class="adm-card">
+                    <div class="adm-card-header">Assignment History</div>
+                    <div class="adm-table-responsive">
+                        <table class="adm-table">
+                            <thead><tr><th>Personnel</th><th>Assigned</th><th>Unassigned</th><th>Reason</th><th>Active</th></tr></thead>
+                            <tbody>
+                                @foreach (var a in order.AssignmentHistory)
+                                {
+                                    <tr>
+                                        <td class="fw-semibold small">@a.PersonnelName</td>
+                                        <td class="small text-muted">@a.AssignedAt.ToString("dd MMM, HH:mm")</td>
+                                        <td class="small text-muted">@(a.UnassignedAt?.ToString("dd MMM, HH:mm") ?? "—")</td>
+                                        <td class="small">@(a.UnassignedReason ?? "—")</td>
+                                        <td>@(a.IsActive ? "✓" : "—")</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            }
+        </div>
+
+        @* ── Sidebar ─────────────────────────────────────────────────────────────── *@
+        <div class="col-12 col-lg-4">
+
+            @* Current assignment *@
+            <div class="adm-card mb-3">
+                <div class="adm-card-header">Delivery Assignment</div>
+                <div class="p-3">
+                    @if (order.AssignedPersonnelId.HasValue)
+                    {
+                        <div class="mb-3 small">
+                            <div class="fw-semibold text-success mb-1">Currently Assigned</div>
+                            <div class="fw-bold">@order.AssignedPersonnelName</div>
+                            <div class="text-muted">@order.AssignedPersonnelPhone</div>
+                            <div class="text-muted">Since @order.AssignedAt?.ToString("dd MMM, HH:mm") UTC</div>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="text-muted small mb-3">No delivery person assigned.</div>
+                    }
+
+                    @* Assign form *@
+                    @if (IsAssignable(order.Status) && Model.Personnel.Count > 0)
+                    {
+                        <form asp-controller="AdminDelivery" asp-action="Assign"
+                              asp-route-orderId="@order.OrderId" method="post" class="mb-3">
+                            @Html.AntiForgeryToken()
+                            <div class="mb-2">
+                                <label class="form-label small fw-semibold">
+                                    @(order.AssignedPersonnelId.HasValue ? "Reassign to" : "Assign to")
+                                </label>
+                                <select name="AssignPersonnelId" class="form-select form-select-sm" required>
+                                    <option value="">Select delivery person…</option>
+                                    @foreach (var p in Model.Personnel)
+                                    {
+                                        if (p.Id == order.AssignedPersonnelId)
+                                        {
+                                            <option value="@p.Id" selected="selected">@p.FullName (@p.ContactNumber) — @p.ActiveAssignmentCount active</option>
+                                        }
+                                        else
+                                        {
+                                            <option value="@p.Id">@p.FullName (@p.ContactNumber) — @p.ActiveAssignmentCount active</option>
+                                        }
+                                    }
+                                </select>
+                            </div>
+                            <div class="mb-2">
+                                <input type="text" name="AssignNotes" class="form-control form-control-sm"
+                                       placeholder="Notes (optional)" maxlength="300" />
+                            </div>
+                            <button type="submit" class="btn btn-sm btn-primary w-100">
+                                @(order.AssignedPersonnelId.HasValue ? "Reassign" : "Assign")
+                            </button>
+                        </form>
+                    }
+
+                    @* Unassign form *@
+                    @if (order.AssignedPersonnelId.HasValue && CanUnassign(order.Status))
+                    {
+                        <form asp-controller="AdminDelivery" asp-action="Unassign"
+                              asp-route-orderId="@order.OrderId" method="post"
+                              onsubmit="return confirm('Unassign this delivery person?');">
+                            @Html.AntiForgeryToken()
+                            <div class="mb-2">
+                                <input type="text" name="UnassignReason" class="form-control form-control-sm"
+                                       placeholder="Reason for unassigning" required maxlength="300" />
+                            </div>
+                            <button type="submit" class="btn btn-sm btn-outline-danger w-100">
+                                Unassign
+                            </button>
+                        </form>
+                    }
+                </div>
+            </div>
+
+            @* Also view in orders admin *@
+            <a href="/admin/orders/@order.OrderId" class="btn btn-sm btn-outline-secondary w-100">
+                View in Orders Admin →
+            </a>
+        </div>
+    </div>
+}
+
+@functions {
+    static string GetStatusClass(string status) => status.ToLower() switch {
+        "confirmed"      => "confirmed",
+        "processing"     => "preparing",
+        "pickedup"       => "confirmed",
+        "outfordelivery" => "out_for_delivery",
+        "delivered"      => "delivered",
+        "deliveryfailed" => "failed",
+        "cancelled"      => "cancelled",
+        _                => "pending"
+    };
+    static string GetStatusLabel(string status) => status switch {
+        "OutForDelivery" => "Out for Delivery",
+        "PickedUp"       => "Picked Up",
+        "DeliveryFailed" => "Delivery Failed",
+        _                => status
+    };
+    static bool IsAssignable(string status) =>
+        status is "Confirmed" or "Processing";
+    static bool CanUnassign(string status) =>
+        status is "Confirmed" or "Processing" or "PickedUp" or "OutForDelivery";
+}

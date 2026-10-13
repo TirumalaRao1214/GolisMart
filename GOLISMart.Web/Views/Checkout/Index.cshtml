@@ -1,0 +1,258 @@
+@model GOLISMart.Web.Models.CheckoutAddressViewModel
+@using GOLISMart.Web.Services
+@{
+    ViewData["Title"] = "Checkout — Select Delivery Address";
+}
+
+<div class="container py-4">
+
+    @* Checkout breadcrumb *@
+    <nav aria-label="Checkout steps" class="mb-4">
+        <ol class="checkout-steps">
+            <li class="checkout-step checkout-step--active">
+                <span class="checkout-step-num">1</span>
+                <span class="checkout-step-label">Delivery Address</span>
+            </li>
+            <li class="checkout-step">
+                <span class="checkout-step-num">2</span>
+                <span class="checkout-step-label">Review Order</span>
+            </li>
+            <li class="checkout-step">
+                <span class="checkout-step-num">3</span>
+                <span class="checkout-step-label">Place Order</span>
+            </li>
+        </ol>
+    </nav>
+
+    <h1 class="h4 fw-bold mb-4" style="color:var(--gm-text);">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+             style="width:22px;height:22px;vertical-align:middle;margin-right:8px;">
+            <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/>
+        </svg>
+        Select Delivery Address
+    </h1>
+
+    @if (!Model.ApiAvailable)
+    {
+        <div class="alert alert-warning" role="alert">
+            <strong>Service unavailable.</strong> We could not load your checkout. Please try again.
+        </div>
+    }
+    else
+    {
+        @if (!string.IsNullOrEmpty(Model.ErrorMessage))
+        {
+            <div class="alert alert-danger" role="alert">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                     style="width:16px;height:16px;vertical-align:middle;margin-right:6px;">
+                    <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/>
+                    <line x1="12" y1="16" x2="12.01" y2="16"/>
+                </svg>
+                @Model.ErrorMessage
+            </div>
+        }
+
+        @if (TempData["CheckoutError"] is string checkoutErr)
+        {
+            <div class="alert alert-danger" role="alert">@checkoutErr</div>
+        }
+
+        <div class="row g-4">
+
+            @* ── Address selection panel ─────────────────────────────────── *@
+            <div class="col-12 col-lg-8">
+
+                @if (!Model.Addresses.Any())
+                {
+                    <div class="card shadow-sm border-0 mb-4">
+                        <div class="card-body text-center py-5">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="#adb5bd" stroke-width="1.5"
+                                 width="56" height="56" class="mb-3">
+                                <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/>
+                                <circle cx="12" cy="10" r="3"/>
+                            </svg>
+                            <h5 class="text-muted mb-2">No saved addresses</h5>
+                            <p class="text-muted small mb-3">
+                                Please add a delivery address to continue with checkout.
+                            </p>
+                            <a asp-controller="Account" asp-action="AddAddress"
+                               asp-route-returnUrl="/checkout"
+                               class="btn btn-success">
+                                + Add Delivery Address
+                            </a>
+                        </div>
+                    </div>
+                }
+                else
+                {
+                    <form method="post" asp-controller="Checkout" asp-action="Review" id="checkoutAddressForm">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="addressId" id="selectedAddressId"
+                               value="@(Model.PreselectedAddressId?.ToString() ?? "")" />
+
+                        <div class="row g-3 mb-4">
+                            @foreach (var address in Model.Addresses)
+                            {
+                                var isSelected = address.Id == Model.PreselectedAddressId;
+                                <div class="col-12 col-md-6">
+                                    <div class="checkout-address-card @(isSelected ? "checkout-address-card--selected" : "")"
+                                         data-address-id="@address.Id"
+                                         onclick="selectAddress(@address.Id, this)"
+                                         tabindex="0"
+                                         role="radio"
+                                         aria-checked="@(isSelected ? "true" : "false")"
+                                         aria-label="Select @address.RecipientName, @address.AddressLabel">
+
+                                        @* Selection indicator *@
+                                        <div class="checkout-address-radio">
+                                            <div class="checkout-radio-dot @(isSelected ? "checkout-radio-dot--active" : "")"></div>
+                                        </div>
+
+                                        <div class="checkout-address-body">
+                                            @if (address.IsDefault)
+                                            {
+                                                <span class="badge bg-success mb-1">Default</span>
+                                            }
+                                            <div class="d-flex align-items-center gap-2 mb-1">
+                                                <span class="badge @(address.AddressLabel == "Home" ? "bg-success" : address.AddressLabel == "Work" ? "bg-primary" : "bg-secondary")">
+                                                    @address.AddressLabel
+                                                </span>
+                                                <strong class="small">@address.RecipientName</strong>
+                                            </div>
+                                            <p class="mb-1 text-muted small">@address.RecipientMobile</p>
+                                            <p class="mb-0 small">
+                                                @address.HouseNumber, @address.BuildingStreet,<br />
+                                                @address.Locality,
+                                                @if (!string.IsNullOrEmpty(address.Landmark))
+                                                {
+                                                    <span>near @address.Landmark,</span>
+                                                }
+                                                <br />@address.City — @address.Pincode, @address.State
+                                            </p>
+                                            @if (!string.IsNullOrEmpty(address.DeliveryInstructions))
+                                            {
+                                                <p class="mb-0 small text-muted mt-1">
+                                                    <em>@address.DeliveryInstructions</em>
+                                                </p>
+                                            }
+                                        </div>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+
+                        @* Add new address link *@
+                        <div class="mb-4">
+                            <a asp-controller="Account" asp-action="AddAddress"
+                               asp-route-returnUrl="/checkout"
+                               class="btn btn-outline-secondary btn-sm">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                                     style="width:14px;height:14px;margin-right:4px;">
+                                    <line x1="12" y1="5" x2="12" y2="19"/>
+                                    <line x1="5" y1="12" x2="19" y2="12"/>
+                                </svg>
+                                Add New Address
+                            </a>
+                        </div>
+
+                        <div class="d-flex gap-3 flex-wrap">
+                            <a asp-controller="Cart" asp-action="Index" class="btn btn-outline-secondary">
+                                ← Back to Cart
+                            </a>
+                            <button type="submit" class="btn btn-success px-5" id="continueBtn"
+                                    @(Model.PreselectedAddressId is null ? "disabled" : "")>
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                                     style="width:14px;height:14px;margin-right:4px;">
+                                    <path d="M5 12h14"/><path d="M12 5l7 7-7 7"/>
+                                </svg>
+                                Continue to Review
+                            </button>
+                        </div>
+                    </form>
+                }
+            </div>
+
+            @* ── Mini cart summary sidebar ───────────────────────────────── *@
+            @if (Model.Cart is not null && Model.Cart.Items.Count > 0)
+            {
+                <div class="col-12 col-lg-4">
+                    <div class="card shadow-sm border-0 sticky-top" style="top:80px;">
+                        <div class="card-header bg-white fw-semibold border-bottom">
+                            Order Summary
+                            <span class="text-muted fw-normal small ms-1">
+                                (@Model.Cart.TotalItems item@(Model.Cart.TotalItems != 1 ? "s" : ""))
+                            </span>
+                        </div>
+                        <div class="card-body p-3">
+                            @foreach (var item in Model.Cart.Items.Take(5))
+                            {
+                                <div class="d-flex align-items-center gap-2 mb-2 pb-2 border-bottom">
+                                    @if (!string.IsNullOrEmpty(item.ImagePath))
+                                    {
+                                        <img src="@item.ImagePath" alt="@item.Name"
+                                             style="width:40px;height:40px;object-fit:cover;border-radius:4px;"
+                                             onerror="this.style.display='none'" />
+                                    }
+                                    <div class="flex-grow-1">
+                                        <div class="small fw-semibold text-truncate" style="max-width:140px;">@item.Name</div>
+                                        <div class="small text-muted">@item.UnitLabel × @item.Quantity.ToString("G29")</div>
+                                    </div>
+                                    <div class="small fw-semibold">₹@item.LineTotal.ToString("N2")</div>
+                                </div>
+                            }
+                            @if (Model.Cart.Items.Count > 5)
+                            {
+                                <p class="small text-muted text-center mb-2">
+                                    +@(Model.Cart.Items.Count - 5) more item(s)
+                                </p>
+                            }
+                            <div class="d-flex justify-content-between fw-semibold mt-2 pt-2 border-top">
+                                <span>Subtotal</span>
+                                <span>₹@Model.Cart.SubTotal.ToString("N2")</span>
+                            </div>
+                            <p class="small text-muted mt-1 mb-0">
+                                Delivery fee and total will be confirmed after address selection.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@section Scripts {
+<script>
+    function selectAddress(id, el) {
+        // Update hidden input
+        document.getElementById('selectedAddressId').value = id;
+
+        // Update visual state
+        document.querySelectorAll('.checkout-address-card').forEach(function(card) {
+            card.classList.remove('checkout-address-card--selected');
+            card.setAttribute('aria-checked', 'false');
+            var dot = card.querySelector('.checkout-radio-dot');
+            if (dot) dot.classList.remove('checkout-radio-dot--active');
+        });
+
+        el.classList.add('checkout-address-card--selected');
+        el.setAttribute('aria-checked', 'true');
+        var dot = el.querySelector('.checkout-radio-dot');
+        if (dot) dot.classList.add('checkout-radio-dot--active');
+
+        // Enable continue button
+        document.getElementById('continueBtn').disabled = false;
+    }
+
+    // Keyboard support
+    document.querySelectorAll('.checkout-address-card').forEach(function(card) {
+        card.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                var id = parseInt(this.dataset.addressId, 10);
+                selectAddress(id, this);
+            }
+        });
+    });
+</script>
+}

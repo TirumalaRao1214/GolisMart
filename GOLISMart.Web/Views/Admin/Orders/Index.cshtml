@@ -1,0 +1,127 @@
+@model AdminOrderListViewModel
+@{
+    Layout = "~/Views/Admin/_AdminLayout.cshtml";
+    ViewData["Title"] = "Orders";
+}
+
+<div class="adm-page-header">
+    <h1>Orders</h1>
+</div>
+
+<form method="get" class="adm-card p-3 mb-3">
+    <div class="row g-2 align-items-end">
+        <div class="col-12 col-sm-6 col-md-3">
+            <label class="form-label small mb-1">Search</label>
+            <input type="text" name="search" value="@Model.Search" class="form-control form-control-sm" placeholder="Order # or email" />
+        </div>
+        <div class="col-6 col-md-2">
+            <label class="form-label small mb-1">Status</label>
+            <select name="status" class="form-select form-select-sm">
+                <option value="">All</option>
+                @foreach (var st in new[] { "Pending", "Confirmed", "Preparing", "Out for Delivery", "Delivered", "Cancelled" })
+                {
+                    <option value="@st" selected="@(Model.Status == st)">@st</option>
+                }
+            </select>
+        </div>
+        <div class="col-6 col-md-2">
+            <label class="form-label small mb-1">Payment</label>
+            <select name="paymentStatus" class="form-select form-select-sm">
+                <option value="">All</option>
+                <option value="Paid" selected="@(Model.PaymentStatus == "Paid")">Paid</option>
+                <option value="Unpaid" selected="@(Model.PaymentStatus == "Unpaid")">Unpaid</option>
+            </select>
+        </div>
+        <div class="col-6 col-md-2">
+            <label class="form-label small mb-1">From</label>
+            <input type="date" name="from" value="@Model.From" class="form-control form-control-sm" />
+        </div>
+        <div class="col-6 col-md-2">
+            <label class="form-label small mb-1">To</label>
+            <input type="date" name="to" value="@Model.To" class="form-control form-control-sm" />
+        </div>
+        <div class="col-12 col-md-1 d-flex gap-1">
+            <button type="submit" class="btn btn-primary btn-sm w-100">Go</button>
+        </div>
+    </div>
+    <div class="mt-2">
+        <a asp-controller="AdminOrders" asp-action="Index" class="btn btn-outline-secondary btn-sm">Clear</a>
+    </div>
+</form>
+
+@if (!Model.ApiAvailable || Model.Orders is null)
+{
+    <div class="alert alert-warning">Could not load orders.</div>
+}
+else if (Model.Orders.Items.Count == 0)
+{
+    <div class="adm-card p-4 text-muted text-center">No orders found.</div>
+}
+else
+{
+    <div class="adm-card">
+        <div class="adm-table-responsive">
+            <table class="adm-table">
+                <thead>
+                    <tr>
+                        <th>Order #</th>
+                        <th>Customer</th>
+                        <th>Items</th>
+                        <th>Total</th>
+                        <th>Status</th>
+                        <th>Payment</th>
+                        <th>Date</th>
+                        <th class="text-end">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var o in Model.Orders.Items)
+                    {
+                        <tr>
+                            <td><strong>#@o.OrderNumber</strong></td>
+                            <td>
+                                <div>@o.CustomerName</div>
+                                <div class="text-muted small">@o.CustomerEmail</div>
+                            </td>
+                            <td>@o.ItemCount</td>
+                            <td>₹@o.TotalAmount.ToString("N2")</td>
+                            <td><span class="adm-badge adm-badge-@o.Status.ToLower().Replace(" ", "_")">@o.Status</span></td>
+                            <td>
+                                <span class="adm-badge @(o.PaymentStatus == "Paid" ? "adm-badge-paid" : "adm-badge-unpaid")">
+                                    @o.PaymentStatus
+                                </span>
+                            </td>
+                            <td class="text-muted small">@o.CreatedAt.ToString("dd MMM, HH:mm")</td>
+                            <td class="text-end">
+                                <a asp-controller="AdminOrders" asp-action="Detail" asp-route-id="@o.OrderId"
+                                   class="btn btn-sm btn-outline-primary" data-no-spa="true">View</a>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    @if (Model.Orders.TotalPages > 1)
+    {
+        <nav class="mt-3">
+            <ul class="pagination pagination-sm justify-content-center">
+                @for (var i = 1; i <= Model.Orders.TotalPages; i++)
+                {
+                    var pg = i;
+                    <li class="page-item @(pg == Model.Page ? "active" : "")">
+                        <a class="page-link"
+                           asp-controller="AdminOrders" asp-action="Index"
+                           asp-route-page="@pg"
+                           asp-route-search="@Model.Search"
+                           asp-route-status="@Model.Status"
+                           asp-route-paymentStatus="@Model.PaymentStatus"
+                           asp-route-from="@Model.From"
+                           asp-route-to="@Model.To">@pg</a>
+                    </li>
+                }
+            </ul>
+        </nav>
+    }
+}

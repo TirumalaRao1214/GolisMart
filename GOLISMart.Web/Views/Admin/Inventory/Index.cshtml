@@ -1,0 +1,99 @@
+@model AdminInventoryViewModel
+@{
+    Layout = "~/Views/Admin/_AdminLayout.cshtml";
+    ViewData["Title"] = "Inventory";
+}
+
+<div class="adm-page-header">
+    <h1>Inventory</h1>
+    <a asp-controller="AdminInventory" asp-action="Adjust" class="btn btn-primary btn-sm">+ Adjust Stock</a>
+</div>
+
+<form method="get" class="adm-card p-3 mb-3 d-flex flex-wrap gap-2 align-items-end">
+    <div>
+        <label class="form-label small mb-1">Search</label>
+        <input type="text" name="search" value="@Model.Search" class="form-control form-control-sm" placeholder="Product name or SKU" />
+    </div>
+    <div class="form-check ms-2 mt-auto mb-1">
+        <input type="checkbox" name="lowStock" value="true" id="chkLow"
+               class="form-check-input" @(Model.LowStock == true ? "checked" : "") />
+        <label class="form-check-label" for="chkLow">Low Stock Only</label>
+    </div>
+    <button type="submit" class="btn btn-primary btn-sm">Filter</button>
+    <a asp-controller="AdminInventory" asp-action="Index" class="btn btn-outline-secondary btn-sm">Clear</a>
+</form>
+
+@if (!Model.ApiAvailable || Model.Inventory is null)
+{
+    <div class="alert alert-warning">Could not load inventory data.</div>
+}
+else if (Model.Inventory.Items.Count == 0)
+{
+    <div class="adm-card p-4 text-muted text-center">No inventory items found.</div>
+}
+else
+{
+    <div class="adm-card">
+        <div class="adm-table-responsive">
+            <table class="adm-table">
+                <thead>
+                    <tr>
+                        <th>SKU</th>
+                        <th>Product</th>
+                        <th>On Hand</th>
+                        <th>Reserved</th>
+                        <th>Available</th>
+                        <th>Threshold</th>
+                        <th>Updated</th>
+                        <th class="text-end">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var item in Model.Inventory.Items)
+                    {
+                        <tr class="@(item.IsLowStock ? "table-warning" : "")">
+                            <td class="text-muted small">@item.SKU</td>
+                            <td>
+                                @item.ProductName
+                                @if (item.IsLowStock)
+                                {
+                                    <span class="adm-badge adm-badge-low ms-1">Low</span>
+                                }
+                            </td>
+                            <td class="@(item.IsLowStock ? "text-danger fw-semibold" : "")">@item.QuantityOnHand</td>
+                            <td>@item.ReservedQuantity</td>
+                            <td>@(item.QuantityOnHand - item.ReservedQuantity)</td>
+                            <td>@item.LowStockThreshold</td>
+                            <td class="text-muted small">@item.UpdatedAt.ToString("dd MMM HH:mm")</td>
+                            <td class="text-end">
+                                <a asp-controller="AdminInventory" asp-action="Adjust"
+                                   asp-route-productId="@item.ProductId"
+                                   asp-route-productName="@item.ProductName"
+                                   class="btn btn-sm btn-outline-primary" data-no-spa="true">Adjust</a>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    @if (Model.Inventory.TotalPages > 1)
+    {
+        <nav class="mt-3">
+            <ul class="pagination pagination-sm justify-content-center">
+                @for (var i = 1; i <= Model.Inventory.TotalPages; i++)
+                {
+                    var pg = i;
+                    <li class="page-item @(pg == Model.Page ? "active" : "")">
+                        <a class="page-link"
+                           asp-controller="AdminInventory" asp-action="Index"
+                           asp-route-page="@pg"
+                           asp-route-search="@Model.Search"
+                           asp-route-lowStock="@Model.LowStock">@pg</a>
+                    </li>
+                }
+            </ul>
+        </nav>
+    }
+}

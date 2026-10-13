@@ -1,0 +1,99 @@
+@model GOLISMart.Web.Models.SearchViewModel
+@{
+    ViewData["Title"] = string.IsNullOrEmpty(Model.Query) ? "Search" : $"Search: {Model.Query}";
+    ViewData["SearchQuery"] = Model.Query;
+
+    ViewData["CurrentPage"] = Model.Page;
+    ViewData["TotalPages"]  = Model.Results?.TotalPages ?? 0;
+    ViewData["RouteValues"] = new Dictionary<string, string?> { ["q"] = Model.Query };
+}
+
+@if (!Model.ApiAvailable)
+{
+    @await Html.PartialAsync("_ApiError")
+}
+else
+{
+    <div class="container py-4">
+        @* Breadcrumb *@
+        <nav aria-label="breadcrumb" class="mb-3">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a asp-controller="Home" asp-action="Index">Home</a></li>
+                <li class="breadcrumb-item active" aria-current="page">
+                    @(string.IsNullOrEmpty(Model.Query) ? "Search" : $"Search: {Html.Encode(Model.Query)}")
+                </li>
+            </ol>
+        </nav>
+
+        @* Search form *@
+        <div class="mb-4" style="max-width:560px;">
+            <form method="get" asp-controller="Catalog" asp-action="Search" class="d-flex gap-2">
+                <input class="form-control" type="search" name="q"
+                       value="@Html.Encode(Model.Query)"
+                       placeholder="Search for products…"
+                       aria-label="Search products" />
+                <button class="gm-btn-primary" type="submit" style="white-space:nowrap;">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                    Search
+                </button>
+            </form>
+        </div>
+
+        @* Heading + count *@
+        @if (!string.IsNullOrEmpty(Model.Query))
+        {
+            <div class="mb-4">
+                <h1 class="h4 fw-bold mb-1" style="color:var(--gm-text);">
+                    Results for <em style="font-style:italic;">&ldquo;@Html.Encode(Model.Query)&rdquo;</em>
+                </h1>
+                @if (Model.Results != null)
+                {
+                    <p style="color:var(--gm-text-muted);font-size:.9rem;margin:0;">
+                        @Model.Results.TotalCount result@(Model.Results.TotalCount == 1 ? "" : "s") found
+                    </p>
+                }
+            </div>
+        }
+
+        @if (string.IsNullOrEmpty(Model.Query))
+        {
+            <div class="gm-empty-state">
+                <div class="gm-empty-state-icon">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                </div>
+                <h5>What are you looking for?</h5>
+                <p>Type a product name above to find what you need.</p>
+            </div>
+        }
+        else if (Model.Results == null || Model.Results.Items.Count == 0)
+        {
+            <div class="gm-empty-state">
+                <div class="gm-empty-state-icon">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                </div>
+                <h5>No products found</h5>
+                <p class="mb-3">
+                    No results for <strong>@Html.Encode(Model.Query)</strong>.<br />
+                    <span style="font-size:.85rem;color:var(--gm-text-muted);">Try a different keyword, or browse all categories.</span>
+                </p>
+                <a asp-controller="Catalog" asp-action="Index" class="gm-btn-secondary" style="font-size:.85rem;">
+                    Browse All Products
+                </a>
+            </div>
+        }
+        else
+        {
+            <div class="row row-cols-2 row-cols-sm-3 row-cols-md-4 row-cols-lg-5 g-3">
+                @foreach (var p in Model.Results.Items)
+                {
+                    <div class="col">
+                        @await Html.PartialAsync("_ProductCard", p)
+                    </div>
+                }
+            </div>
+            <div class="mt-4">
+                @await Html.PartialAsync("_Pagination")
+            </div>
+        }
+    </div>
+}

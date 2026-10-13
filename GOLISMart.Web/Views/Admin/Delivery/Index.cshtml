@@ -1,0 +1,180 @@
+@model GOLISMart.Web.Models.AdminDeliveryListViewModel
+@{
+    ViewData["Title"] = "Delivery Management";
+    Layout = "~/Views/Admin/_AdminLayout.cshtml";
+}
+
+<div class="adm-page-header">
+    <h1>Delivery Management</h1>
+    <a href="/admin/delivery/personnel" class="btn btn-sm btn-outline-primary">
+        Manage Personnel
+    </a>
+</div>
+
+@* Filters *@
+<form method="get" action="/admin/delivery" class="adm-card mb-4">
+    <div class="adm-card-header">Filters</div>
+    <div class="p-3">
+        <div class="row g-2">
+            <div class="col-12 col-sm-6 col-md-3">
+                <input type="text" name="search" value="@Model.Search"
+                       class="form-control form-control-sm" placeholder="Order # / Customer" />
+            </div>
+            <div class="col-6 col-sm-3 col-md-2">
+                <select name="status" class="form-select form-select-sm">
+                    <option value="">All Statuses</option>
+                    @foreach (var s in new[] { "Confirmed","Processing","PickedUp","OutForDelivery","Delivered","DeliveryFailed","Cancelled" })
+                    {
+                        if (Model.Status == s)
+                        { <option value="@s" selected="selected">@GetStatusLabel(s)</option> }
+                        else
+                        { <option value="@s">@GetStatusLabel(s)</option> }
+                    }
+                </select>
+            </div>
+            <div class="col-6 col-sm-3 col-md-2">
+                <input type="date" name="from" value="@Model.From"
+                       class="form-control form-control-sm" title="From date" />
+            </div>
+            <div class="col-6 col-sm-3 col-md-2">
+                <input type="date" name="to" value="@Model.To"
+                       class="form-control form-control-sm" title="To date" />
+            </div>
+            <div class="col-6 col-sm-3 col-md-2">
+                <input type="text" name="pincode" value="@Model.Pincode"
+                       class="form-control form-control-sm" placeholder="Postcode" maxlength="6" />
+            </div>
+            <div class="col-12 col-sm-6 col-md-3">
+                <select name="personnelId" class="form-select form-select-sm">
+                    <option value="">All Delivery Personnel</option>
+                    @foreach (var p in Model.Personnel)
+                    {
+                        if (Model.PersonnelId == p.Id)
+                        { <option value="@p.Id" selected="selected">@p.FullName</option> }
+                        else
+                        { <option value="@p.Id">@p.FullName</option> }
+                    }
+                </select>
+            </div>
+            <div class="col-auto">
+                <button type="submit" class="btn btn-sm btn-primary">Filter</button>
+                <a href="/admin/delivery" class="btn btn-sm btn-outline-secondary">Clear</a>
+            </div>
+        </div>
+    </div>
+</form>
+
+@if (!Model.ApiAvailable)
+{
+    <div class="alert alert-warning">Unable to load deliveries. Please try again.</div>
+}
+else if (Model.Orders is null || Model.Orders.TotalCount == 0)
+{
+    <div class="adm-card">
+        <div class="p-4 text-center text-muted">No orders found matching your filters.</div>
+    </div>
+}
+else
+{
+    <div class="adm-card">
+        <div class="adm-card-header">
+            Orders
+            <span class="text-muted ms-2" style="font-weight:400;">@Model.Orders.TotalCount total</span>
+        </div>
+        <div class="adm-table-responsive">
+            <table class="adm-table">
+                <thead>
+                    <tr>
+                        <th>Order #</th>
+                        <th>Date</th>
+                        <th>Customer</th>
+                        <th>Postcode</th>
+                        <th>Total</th>
+                        <th>Payment</th>
+                        <th>Status</th>
+                        <th>Assigned To</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var o in Model.Orders.Items)
+                    {
+                        <tr>
+                            <td><span class="fw-semibold">@o.OrderNumber</span></td>
+                            <td class="text-muted" style="white-space:nowrap;">@o.OrderDate.ToString("dd MMM yy")</td>
+                            <td>
+                                <div class="fw-semibold small">@o.CustomerName</div>
+                                <div class="text-muted small">@o.CustomerPhone</div>
+                            </td>
+                            <td class="text-muted small">@o.ShipToPincode</td>
+                            <td>₹@o.TotalAmount.ToString("N2")</td>
+                            <td>
+                                <span class="adm-badge adm-badge-@o.PaymentStatus.ToLower()">@o.PaymentStatus</span>
+                                @if (o.PaymentMethod == "COD")
+                                {
+                                    <span class="adm-badge adm-badge-pending ms-1" title="Cash on Delivery">COD</span>
+                                }
+                            </td>
+                            <td><span class="adm-badge adm-badge-@GetStatusClass(o.Status)">@GetStatusLabel(o.Status)</span></td>
+                            <td>
+                                @if (o.AssignedPersonnelName is not null)
+                                {
+                                    <div class="small fw-semibold">@o.AssignedPersonnelName</div>
+                                    <div class="text-muted small">@o.AssignedAt?.ToString("dd MMM")</div>
+                                }
+                                else
+                                {
+                                    <span class="text-muted small">Unassigned</span>
+                                }
+                            </td>
+                            <td>
+                                <a href="/admin/delivery/@o.OrderId" class="btn btn-xs btn-outline-primary" style="font-size:12px;padding:2px 10px;">
+                                    Manage
+                                </a>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    @* Pagination *@
+    @if (Model.Orders.TotalPages > 1)
+    {
+        <nav class="d-flex justify-content-center mt-3">
+            <ul class="pagination pagination-sm">
+                @for (int i = 1; i <= Model.Orders.TotalPages; i++)
+                {
+                    var active = i == Model.Page;
+                    <li class="page-item @(active ? "active" : "")">
+                        <a class="page-link"
+                           href="?page=@i&search=@Model.Search&status=@Model.Status&from=@Model.From&to=@Model.To&pincode=@Model.Pincode&personnelId=@Model.PersonnelId">
+                            @i
+                        </a>
+                    </li>
+                }
+            </ul>
+        </nav>
+    }
+}
+
+@functions {
+    static string GetStatusClass(string status) => status.ToLower() switch {
+        "confirmed"      => "confirmed",
+        "processing"     => "preparing",
+        "pickedup"       => "confirmed",
+        "outfordelivery" => "out_for_delivery",
+        "delivered"      => "delivered",
+        "deliveryfailed" => "failed",
+        "cancelled"      => "cancelled",
+        _                => "pending"
+    };
+    static string GetStatusLabel(string status) => status switch {
+        "OutForDelivery" => "Out for Delivery",
+        "Processing"     => "Processing",
+        "PickedUp"       => "Picked Up",
+        "DeliveryFailed" => "Delivery Failed",
+        _                => status
+    };
+}

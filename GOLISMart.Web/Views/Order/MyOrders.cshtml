@@ -1,0 +1,230 @@
+@model GOLISMart.Web.Models.MyOrdersViewModel
+@using GOLISMart.Web.Services
+@{
+    ViewData["Title"] = "My Orders";
+    var paged  = Model.PagedOrders;
+    var orders = paged?.Orders ?? new List<OrderSummaryDto>();
+    var hasDateFilter = !string.IsNullOrEmpty(Model.DateFrom) || !string.IsNullOrEmpty(Model.DateTo);
+}
+
+<div class="container py-4">
+
+    <div class="d-flex align-items-center justify-content-between mb-4">
+        <h1 class="h4 fw-bold mb-0" style="color:var(--gm-text);">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                 style="width:22px;height:22px;vertical-align:middle;margin-right:8px;">
+                <path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/>
+            </svg>
+            My Orders
+        </h1>
+        <a asp-controller="Catalog" asp-action="Index" class="btn btn-outline-secondary btn-sm">
+            Continue Shopping
+        </a>
+    </div>
+
+    @* Flash messages *@
+    @if (TempData["OrderError"] is string errMsg)
+    {
+        <div class="alert alert-danger" role="alert">@errMsg</div>
+    }
+
+    @if (!Model.ApiAvailable)
+    {
+        <div class="alert alert-warning" role="alert">
+            @(Model.ErrorMessage ?? "Unable to load orders. Please try again.")
+        </div>
+    }
+    else
+    {
+        @* Status filter *@
+        <div class="d-flex flex-wrap gap-2 mb-3">
+            @{
+                var statuses = new[] { ("", "All"), ("Pending", "Pending"), ("Confirmed", "Confirmed"),
+                    ("Processing", "Preparing"), ("OutForDelivery", "Out for Delivery"),
+                    ("Delivered", "Delivered"), ("Cancelled", "Cancelled") };
+            }
+            @foreach (var (value, label) in statuses)
+            {
+                var isActive = Model.StatusFilter == value || (value == "" && string.IsNullOrEmpty(Model.StatusFilter));
+                <a asp-controller="Order" asp-action="MyOrders"
+                   asp-route-status="@(value == "" ? null : value)"
+                   asp-route-dateFrom="@Model.DateFrom"
+                   asp-route-dateTo="@Model.DateTo"
+                   class="btn btn-sm @(isActive ? "btn-primary" : "btn-outline-secondary")">
+                    @label
+                </a>
+            }
+        </div>
+
+        @* Date range filter *@
+        <form method="get" asp-controller="Order" asp-action="MyOrders" class="mb-4">
+            <input type="hidden" name="status" value="@Model.StatusFilter" />
+            <div class="d-flex flex-wrap gap-2 align-items-end">
+                <div>
+                    <label class="form-label small text-muted mb-1">From</label>
+                    <input type="date" name="dateFrom" class="form-control form-control-sm"
+                           value="@Model.DateFrom" style="max-width:160px;" />
+                </div>
+                <div>
+                    <label class="form-label small text-muted mb-1">To</label>
+                    <input type="date" name="dateTo" class="form-control form-control-sm"
+                           value="@Model.DateTo" style="max-width:160px;" />
+                </div>
+                <button type="submit" class="btn btn-sm btn-outline-primary">Apply</button>
+                @if (hasDateFilter)
+                {
+                    <a asp-controller="Order" asp-action="MyOrders"
+                       asp-route-status="@Model.StatusFilter"
+                       class="btn btn-sm btn-outline-secondary">Clear dates</a>
+                }
+            </div>
+        </form>
+
+        @if (!orders.Any())
+        {
+            @* Empty state *@
+            <div class="text-center py-5">
+                <svg viewBox="0 0 24 24" fill="none" stroke="#adb5bd" stroke-width="1.5"
+                     style="width:64px;height:64px;margin-bottom:16px;">
+                    <path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/>
+                </svg>
+                <h5 class="text-muted fw-normal">No orders found</h5>
+                <p class="text-muted small">
+                    @if (!string.IsNullOrEmpty(Model.StatusFilter))
+                    {
+                        <span>No <strong>@Model.StatusFilter</strong> orders found.</span>
+                    }
+                    else
+                    {
+                        <span>You haven't placed any orders yet.</span>
+                    }
+                </p>
+                <a asp-controller="Catalog" asp-action="Index" class="btn btn-primary mt-2">
+                    Start Shopping
+                </a>
+            </div>
+        }
+        else
+        {
+            @* Orders table (desktop) *@
+            <div class="d-none d-md-block">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th class="small">Order</th>
+                                <th class="small">Date</th>
+                                <th class="small">Items</th>
+                                <th class="small">Total</th>
+                                <th class="small">Status</th>
+                                <th class="small">Payment</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var order in orders)
+                            {
+                                <tr>
+                                    <td class="small fw-semibold">@order.OrderNumber</td>
+                                    <td class="small text-muted">@order.OrderDate.ToString("dd MMM yyyy")</td>
+                                    <td class="small">@order.ItemCount</td>
+                                    <td class="small fw-semibold">₹@order.TotalAmount.ToString("N2")</td>
+                                    <td>
+                                        <span class="badge @GetStatusBadge(order.Status)">@GetStatusLabel(order.Status)</span>
+                                    </td>
+                                    <td>
+                                        <span class="badge @GetPaymentBadge(order.PaymentStatus) text-dark" style="font-size:.65rem;">
+                                            @order.PaymentMethod · @order.PaymentStatus
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <a asp-controller="Order" asp-action="Detail"
+                                           asp-route-orderId="@order.OrderId"
+                                           class="btn btn-sm btn-outline-primary">
+                                            View
+                                        </a>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            @* Orders cards (mobile) *@
+            <div class="d-md-none">
+                @foreach (var order in orders)
+                {
+                    <div class="card shadow-sm border-0 mb-3">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-start mb-2">
+                                <div>
+                                    <div class="fw-semibold small">@order.OrderNumber</div>
+                                    <div class="text-muted" style="font-size:.75rem;">
+                                        @order.OrderDate.ToString("dd MMM yyyy, h:mm tt")
+                                    </div>
+                                </div>
+                                <span class="badge @GetStatusBadge(order.Status)">@GetStatusLabel(order.Status)</span>
+                            </div>
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div class="small text-muted">₹@order.TotalAmount.ToString("N2") · @order.PaymentMethod</div>
+                                <a asp-controller="Order" asp-action="Detail"
+                                   asp-route-orderId="@order.OrderId"
+                                   class="btn btn-sm btn-outline-primary">
+                                    View Details
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                }
+            </div>
+
+            @* Pagination *@
+            @if (paged is not null && paged.TotalPages > 1)
+            {
+                <nav aria-label="Orders pagination" class="mt-4">
+                    <ul class="pagination justify-content-center">
+                        @for (var p = 1; p <= paged.TotalPages; p++)
+                        {
+                            <li class="page-item @(p == paged.Page ? "active" : "")">
+                                <a class="page-link"
+                                   asp-controller="Order" asp-action="MyOrders"
+                                   asp-route-page="@p"
+                                   asp-route-status="@Model.StatusFilter"
+                                   asp-route-dateFrom="@Model.DateFrom"
+                                   asp-route-dateTo="@Model.DateTo">@p</a>
+                            </li>
+                        }
+                    </ul>
+                </nav>
+            }
+        }
+    }
+
+</div>
+
+@functions {
+    static string GetStatusBadge(string status) => status switch {
+        "Pending"         => "bg-warning text-dark",
+        "Confirmed"       => "bg-info text-dark",
+        "Processing"      => "bg-primary",
+        "OutForDelivery"  => "bg-primary",
+        "Delivered"       => "bg-success",
+        "Cancelled"       => "bg-secondary",
+        "Refunded"        => "bg-secondary",
+        _                 => "bg-light text-dark"
+    };
+
+    static string GetStatusLabel(string status) => status switch {
+        "OutForDelivery" => "Out for Delivery",
+        "Processing"     => "Preparing",
+        _                => status
+    };
+
+    static string GetPaymentBadge(string paymentStatus) => paymentStatus switch {
+        "Paid"     => "bg-success-subtle",
+        "Failed"   => "bg-danger-subtle",
+        "Refunded" => "bg-secondary-subtle",
+        _          => "bg-light"
+    };
+}

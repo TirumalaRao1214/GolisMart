@@ -1,0 +1,95 @@
+@model GOLISMart.Web.Models.DeliveryDashboardViewModel
+@{
+    ViewData["Title"] = "My Deliveries";
+}
+
+<div class="container py-4">
+    <div class="d-flex align-items-center justify-content-between mb-4">
+        <h1 class="h4 fw-bold mb-0">My Deliveries</h1>
+        <div class="d-flex gap-2">
+            @foreach (var s in new[] { ("", "All"), ("PickedUp","Picked Up"), ("OutForDelivery","Out for Delivery"), ("Delivered","Delivered") })
+            {
+                var active = Model.StatusFilter == s.Item1;
+                <a href="/delivery/dashboard@(s.Item1 != "" ? "?status=" + s.Item1 : "")"
+                   class="btn btn-sm @(active ? "btn-primary" : "btn-outline-secondary")">
+                    @s.Item2
+                </a>
+            }
+        </div>
+    </div>
+
+    @if (!Model.ApiAvailable)
+    {
+        <div class="alert alert-warning">Unable to load your deliveries. Please try again.</div>
+    }
+    else if (!Model.Assignments.Any())
+    {
+        <div class="card shadow-sm border-0">
+            <div class="card-body text-center text-muted py-5">
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="mb-3 opacity-50">
+                    <rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/>
+                    <circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/>
+                </svg>
+                <div>No deliveries assigned to you right now.</div>
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="row g-3">
+            @foreach (var a in Model.Assignments)
+            {
+                <div class="col-12 col-md-6 col-xl-4">
+                    <div class="card shadow-sm border-0 h-100">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-start mb-2">
+                                <span class="fw-bold">@a.OrderNumber</span>
+                                <span class="badge @GetStatusBadge(a.OrderStatus)">@GetStatusLabel(a.OrderStatus)</span>
+                            </div>
+                            <div class="small mb-2">
+                                <div class="fw-semibold">@a.CustomerName</div>
+                                <div class="text-muted">@a.CustomerPhone</div>
+                            </div>
+                            <div class="small text-muted mb-2">
+                                @a.ShipToAddressLine1,
+                                @if (!string.IsNullOrEmpty(a.ShipToAddressLine2))
+                                { <span>@a.ShipToAddressLine2, </span> }
+                                @a.ShipToCity — @a.ShipToPincode
+                            </div>
+                            <div class="small mb-2 text-truncate text-muted" title="@a.ItemSummary">
+                                <strong>Items:</strong> @a.ItemSummary
+                            </div>
+                            @if (a.IsCod)
+                            {
+                                <div class="alert alert-warning p-2 small mb-2">
+                                    💰 <strong>COD:</strong> Collect ₹@a.TotalAmount.ToString("N2") on delivery
+                                </div>
+                            }
+                            <a href="/delivery/@a.OrderId" class="btn btn-sm btn-primary w-100 mt-auto">
+                                View & Update →
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@functions {
+    static string GetStatusBadge(string status) => status switch {
+        "Confirmed"      => "bg-info text-dark",
+        "Processing"     => "bg-info text-dark",
+        "PickedUp"       => "bg-primary",
+        "OutForDelivery" => "bg-primary",
+        "Delivered"      => "bg-success",
+        "DeliveryFailed" => "bg-danger",
+        _                => "bg-secondary"
+    };
+    static string GetStatusLabel(string status) => status switch {
+        "OutForDelivery" => "Out for Delivery",
+        "PickedUp"       => "Picked Up",
+        "DeliveryFailed" => "Failed",
+        _                => status
+    };
+}

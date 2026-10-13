@@ -1,0 +1,98 @@
+@model GOLISMart.Web.Models.ProductListViewModel
+@{
+    var catName = ViewData["CategoryName"] as string;
+    var totalPages  = Model.Products?.TotalPages ?? 0;
+    var currentPage = Model.Products?.Page ?? 1;
+
+    var routeValues = new Dictionary<string, string?>();
+    if (!string.IsNullOrEmpty(Model.SearchQuery))    routeValues["search"]    = Model.SearchQuery;
+    if (!string.IsNullOrEmpty(Model.SelectedCategory)) routeValues["category"] = Model.SelectedCategory;
+    if (!string.IsNullOrEmpty(Model.SortBy))         routeValues["sortBy"]    = Model.SortBy;
+    if (!string.IsNullOrEmpty(Model.SortOrder))      routeValues["sortOrder"] = Model.SortOrder;
+    if (Model.InStock.HasValue)                      routeValues["inStock"]   = Model.InStock.Value.ToString().ToLower();
+
+    ViewData["CurrentPage"] = currentPage;
+    ViewData["TotalPages"]  = totalPages;
+    ViewData["RouteValues"] = routeValues;
+}
+
+<div id="gm-catalog-content">
+    @* Toolbar *@
+    <div class="d-flex flex-wrap gap-2 align-items-center mb-4 p-3 rounded-3" style="background:var(--gm-neutral-50);border:1px solid var(--gm-border);">
+        <div class="me-auto">
+            <h1 class="h5 fw-bold mb-0" style="color:var(--gm-text);">
+                @(catName ?? (string.IsNullOrEmpty(Model.SearchQuery) ? "All Products" : "Results for \"" + Html.Encode(Model.SearchQuery) + "\""))
+            </h1>
+            @if (Model.Products != null)
+            {
+                <small style="color:var(--gm-text-muted);">@Model.Products.TotalCount product@(Model.Products.TotalCount == 1 ? "" : "s")</small>
+            }
+        </div>
+        @* Sort controls *@
+        <form method="get" asp-controller="Catalog" asp-action="Index" class="d-flex gap-2 align-items-center gm-catalog-filter-form">
+            <input type="hidden" name="search"   value="@Model.SearchQuery" />
+            <input type="hidden" name="category" value="@Model.SelectedCategory" />
+            <input type="hidden" name="inStock"  value="@(Model.InStock?.ToString().ToLower())" />
+            <label class="visually-hidden" for="sortBySelect">Sort by</label>
+            <select id="sortBySelect" name="sortBy" class="form-select form-select-sm" style="font-size:.82rem;">
+                @Html.Raw($"<option value='name'{(Model.SortBy=="name"?" selected":"")} >Name</option>")
+                @Html.Raw($"<option value='price'{(Model.SortBy=="price"?" selected":"")} >Price</option>")
+                @Html.Raw($"<option value='createdat'{(Model.SortBy=="createdat"?" selected":"")} >Newest</option>")
+            </select>
+            <label class="visually-hidden" for="sortOrderSelect">Sort order</label>
+            <select id="sortOrderSelect" name="sortOrder" class="form-select form-select-sm" style="font-size:.82rem;">
+                @Html.Raw($"<option value='asc'{(Model.SortOrder=="asc"?" selected":"")} >&uarr; Asc</option>")
+                @Html.Raw($"<option value='desc'{(Model.SortOrder=="desc"?" selected":"")} >&darr; Desc</option>")
+            </select>
+        </form>
+        @* Inline search *@
+        <form method="get" asp-controller="Catalog" asp-action="Index" class="d-flex gap-1 gm-catalog-search-form">
+            <input type="hidden" name="category"  value="@Model.SelectedCategory" />
+            <input type="hidden" name="sortBy"    value="@Model.SortBy" />
+            <input type="hidden" name="sortOrder" value="@Model.SortOrder" />
+            <input class="form-control form-control-sm" type="search"
+                   name="search" value="@Html.Encode(Model.SearchQuery)"
+                   placeholder="Search…" style="max-width:180px;font-size:.82rem;" />
+            <button class="btn btn-sm btn-success" type="submit" aria-label="Search">
+                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            </button>
+        </form>
+    </div>
+
+    @if (Model.Products == null || Model.Products.Items.Count == 0)
+    {
+        <div class="gm-empty-state">
+            <div class="gm-empty-state-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            </div>
+            <h5>No products found</h5>
+            <p class="mb-3">
+                @if (!string.IsNullOrEmpty(Model.SearchQuery))
+                {
+                    <span>No results for <strong>@Html.Encode(Model.SearchQuery)</strong>. Try a different keyword.</span>
+                }
+                else
+                {
+                    <span>No products match the selected filters.</span>
+                }
+            </p>
+            <a asp-controller="Catalog" asp-action="Index" class="gm-btn-secondary gm-spa-link" style="font-size:.85rem;">
+                Clear all filters
+            </a>
+        </div>
+    }
+    else
+    {
+        <div class="row row-cols-2 row-cols-sm-2 row-cols-md-3 row-cols-lg-4 g-3" id="gm-product-grid-row">
+            @foreach (var p in Model.Products.Items)
+            {
+                <div class="col">
+                    @await Html.PartialAsync("_ProductCard", p)
+                </div>
+            }
+        </div>
+        <div class="mt-4" id="gm-pagination-container">
+            @await Html.PartialAsync("_Pagination")
+        </div>
+    }
+</div>

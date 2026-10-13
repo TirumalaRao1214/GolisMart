@@ -1,0 +1,150 @@
+@model AdminDashboardViewModel
+@{
+    Layout = "~/Views/Admin/_AdminLayout.cshtml";
+    ViewData["Title"] = "Dashboard";
+}
+
+@if (!Model.ApiAvailable || Model.Summary is null)
+{
+    <div class="alert alert-warning">Could not load dashboard data. The API may be unavailable.</div>
+}
+else
+{
+    var s = Model.Summary;
+
+    @* ── Stat cards ─────────────────────────────────────────────────────────── *@
+    <div class="row g-3 mb-4">
+        <div class="col-12 col-sm-6 col-lg-4 col-xl-2">
+            <div class="adm-stat-card">
+                <div class="stat-label">Total Orders</div>
+                <div class="stat-value">@s.TotalOrders.ToString("N0")</div>
+                <div class="stat-sub">Lifetime total</div>
+            </div>
+        </div>
+        <div class="col-12 col-sm-6 col-lg-4 col-xl-2">
+            <div class="adm-stat-card">
+                <div class="stat-label">Pending</div>
+                <div class="stat-value text-warning">@s.PendingOrders</div>
+                <div class="stat-sub">Needs processing</div>
+            </div>
+        </div>
+        <div class="col-12 col-sm-6 col-lg-4 col-xl-2">
+            <div class="adm-stat-card">
+                <div class="stat-label">Today Sales</div>
+                <div class="stat-value">₹@s.TodaySales.ToString("N0")</div>
+                <div class="stat-sub">Since midnight</div>
+            </div>
+        </div>
+        <div class="col-12 col-sm-6 col-lg-4 col-xl-2">
+            <div class="adm-stat-card">
+                <div class="stat-label">Week Sales</div>
+                <div class="stat-value">₹@s.WeekSales.ToString("N0")</div>
+                <div class="stat-sub">Last 7 days</div>
+            </div>
+        </div>
+        <div class="col-12 col-sm-6 col-lg-4 col-xl-2">
+            <div class="adm-stat-card">
+                <div class="stat-label">Active Products</div>
+                <div class="stat-value">@s.ActiveProducts</div>
+                <div class="stat-sub">Catalog live</div>
+            </div>
+        </div>
+        <div class="col-12 col-sm-6 col-lg-4 col-xl-2">
+            <div class="adm-stat-card">
+                <div class="stat-label">Low Stock</div>
+                <div class="stat-value @(s.LowStockCount > 0 ? "text-danger" : "")">@s.LowStockCount</div>
+                @if (s.LowStockCount > 0)
+                {
+                    <div class="stat-sub"><a asp-controller="AdminInventory" asp-action="Index" asp-route-lowStock="true" class="text-danger fw-semibold" data-no-spa="true">View Items →</a></div>
+                }
+                else
+                {
+                    <div class="stat-sub text-success">Healthy stock</div>
+                }
+            </div>
+        </div>
+    </div>
+
+    @* ── Recent Orders ───────────────────────────────────────────────────────── *@
+    <div class="adm-card mb-4">
+        <div class="adm-card-header">
+            <span>Recent Orders</span>
+            <a asp-controller="AdminOrders" asp-action="Index" class="btn btn-sm btn-outline-secondary" data-no-spa="true">View All Orders</a>
+        </div>
+        @if (s.RecentOrders.Count == 0)
+        {
+            <p class="px-4 py-3 text-muted mb-0">No recent orders.</p>
+        }
+        else
+        {
+            <div class="adm-table-responsive">
+                <table class="adm-table">
+                    <thead>
+                        <tr>
+                            <th>Order #</th>
+                            <th>Customer</th>
+                            <th>Total</th>
+                            <th>Status</th>
+                            <th>Date</th>
+                            <th class="text-end">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var o in s.RecentOrders)
+                        {
+                            <tr>
+                                <td><strong>#@o.OrderNumber</strong></td>
+                                <td>@o.CustomerEmail</td>
+                                <td class="fw-semibold">₹@o.Total.ToString("N2")</td>
+                                <td><span class="adm-badge adm-badge-@o.Status.ToLower().Replace(" ", "_")">@o.Status</span></td>
+                                <td class="text-muted small">@o.CreatedAt.ToString("dd MMM, HH:mm")</td>
+                                <td class="text-end"><a asp-controller="AdminOrders" asp-action="Detail" asp-route-id="@o.OrderId" class="btn btn-sm btn-outline-primary" data-no-spa="true">View</a></td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </div>
+
+    @* ── Low Stock ───────────────────────────────────────────────────────────── *@
+    @if (s.LowStockItems.Count > 0)
+    {
+        <div class="adm-card">
+            <div class="adm-card-header">
+                <span>Low Stock Items</span>
+                <a asp-controller="AdminInventory" asp-action="Index" asp-route-lowStock="true" class="btn btn-sm btn-outline-warning" data-no-spa="true">Manage Inventory</a>
+            </div>
+            <div class="adm-table-responsive">
+                <table class="adm-table">
+                    <thead>
+                        <tr>
+                            <th>SKU</th>
+                            <th>Product</th>
+                            <th>On Hand</th>
+                            <th>Threshold</th>
+                            <th class="text-end">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var item in s.LowStockItems)
+                        {
+                            <tr>
+                                <td class="text-muted small">@item.SKU</td>
+                                <td class="fw-semibold">@item.ProductName</td>
+                                <td class="text-danger fw-bold">@item.QuantityOnHand</td>
+                                <td>@item.LowStockThreshold</td>
+                                <td class="text-end">
+                                    <a asp-controller="AdminInventory" asp-action="Adjust"
+                                       asp-route-productId="@item.ProductId"
+                                       asp-route-productName="@item.ProductName"
+                                       class="btn btn-sm btn-outline-secondary" data-no-spa="true">Adjust Stock</a>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
+}

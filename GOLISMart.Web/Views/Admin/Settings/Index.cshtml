@@ -1,0 +1,65 @@
+@model AdminSettingsViewModel
+@{
+    Layout = "~/Views/Admin/_AdminLayout.cshtml";
+    ViewData["Title"] = "Settings";
+    var grouped = Model.Settings.GroupBy(s => s.Category).OrderBy(g => g.Key);
+}
+
+<div class="adm-page-header">
+    <h1>Store Settings</h1>
+</div>
+
+@if (!Model.ApiAvailable || !Model.Settings.Any())
+{
+    <div class="alert alert-warning">Could not load settings or no settings are configured.</div>
+}
+else
+{
+    <form asp-controller="AdminSettings" asp-action="Save" method="post">
+        @Html.AntiForgeryToken()
+
+        @foreach (var group in grouped)
+        {
+            <div class="adm-form-section mb-3">
+                <fieldset>
+                    <legend>@group.Key</legend>
+                    @foreach (var setting in group)
+                    {
+                        <div class="mb-3">
+                            <label class="form-label" for="setting_@setting.Key">
+                                @setting.Key
+                                @if (!string.IsNullOrEmpty(setting.Description))
+                                {
+                                    <small class="text-muted ms-1">— @setting.Description</small>
+                                }
+                            </label>
+                            @if (setting.DataType == "bool")
+                            {
+                                <select name="values[@setting.Key]" id="setting_@setting.Key" class="form-select form-select-sm w-auto">
+                                    <option value="true"  selected="@(setting.Value == "true")">Yes</option>
+                                    <option value="false" selected="@(setting.Value != "true")">No</option>
+                                </select>
+                            }
+                            else if (setting.DataType == "int" || setting.DataType == "decimal")
+                            {
+                                <input type="number" step="@(setting.DataType == "decimal" ? "0.01" : "1")"
+                                       name="values[@setting.Key]" id="setting_@setting.Key"
+                                       value="@setting.Value" class="form-control form-control-sm" style="max-width:200px;" />
+                            }
+                            else
+                            {
+                                <input type="text" name="values[@setting.Key]" id="setting_@setting.Key"
+                                       value="@setting.Value" class="form-control form-control-sm" />
+                            }
+                        </div>
+                    }
+                </fieldset>
+            </div>
+        }
+
+        <div class="d-flex gap-2">
+            <button type="submit" class="btn btn-success">Save Settings</button>
+            <a asp-controller="AdminSettings" asp-action="Index" class="btn btn-outline-secondary">Reset</a>
+        </div>
+    </form>
+}

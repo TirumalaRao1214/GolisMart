@@ -1,0 +1,83 @@
+@model GOLISMart.Web.Models.LoginViewModel
+@{
+    ViewData["Title"] = "Sign In";
+}
+
+<div class="container py-5">
+    <div class="row justify-content-center">
+        <div class="col-12 col-md-7 col-lg-5">
+            <div class="card shadow-sm border-0">
+                <div class="card-body p-4">
+                    <h1 class="h4 mb-1 text-center fw-bold">Sign in</h1>
+                    <p class="text-muted text-center small mb-4">Welcome back to GOLIS Mart</p>
+
+                    @if (TempData["SuccessMessage"] is string success)
+                    {
+                        <div class="alert alert-success alert-dismissible fade show" role="alert">
+                            @success
+                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                        </div>
+                    }
+
+                    @if (!string.IsNullOrEmpty(Model.ErrorMessage))
+                    {
+                        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                            @Model.ErrorMessage
+                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                        </div>
+                    }
+
+                    <form asp-controller="Account" asp-action="Login" method="post" data-ajax-form="true" novalidate>
+                        <input type="hidden" asp-for="ReturnUrl" />
+
+                        <div class="mb-3">
+                            <label asp-for="Email" class="form-label fw-semibold"></label>
+                            <input asp-for="Email" class="form-control" placeholder="you@example.com"
+                                   autocomplete="email" type="email" autofocus />
+                            <span asp-validation-for="Email" class="text-danger small"></span>
+                        </div>
+
+                        <div class="mb-4">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <label asp-for="Password" class="form-label fw-semibold mb-0"></label>
+                            </div>
+                            <div class="input-group mt-1">
+                                <input asp-for="Password" class="form-control"
+                                       autocomplete="current-password" id="loginPassword" />
+                                <button class="btn btn-outline-secondary" type="button" id="toggleLoginPassword"
+                                        aria-label="Toggle password visibility">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+                                    </svg>
+                                </button>
+                            </div>
+                            <span asp-validation-for="Password" class="text-danger small"></span>
+                        </div>
+
+                        <button type="submit" class="btn btn-success w-100 py-2 fw-semibold">
+                            Sign In
+                        </button>
+                    </form>
+
+                    <hr class="my-4" />
+                    <p class="text-center mb-0 small">
+                        New to GOLIS Mart?
+                        <a asp-controller="Account" asp-action="Register" class="text-success fw-semibold">Create account</a>
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+    <script>
+        document.getElementById('toggleLoginPassword')?.addEventListener('click', function () {
+            const input = document.getElementById('loginPassword');
+            if (input) {
+                input.type = input.type === 'password' ? 'text' : 'password';
+            }
+        });
+    </script>
+}

@@ -1,0 +1,1067 @@
+@model GOLISMart.Web.Services.AnalyticsDashboardDto
+@{
+    Layout = "~/Views/Admin/_AdminLayout.cshtml";
+    ViewData["Title"] = "Reports & Business Insights";
+}
+
+<style>
+    .reports-container { position: relative; }
+    .filter-btn-group .btn { border-radius: 20px; font-size: 13px; font-weight: 500; padding: 6px 16px; transition: all 0.15s ease-in-out; }
+    .filter-btn-group .btn-outline-primary { border-color: #d1d5db; color: #4b5563; }
+    .filter-btn-group .btn-outline-primary:hover, .filter-btn-group .btn-outline-primary.active { background-color: #2e7d32; border-color: #2e7d32; color: #fff; }
+    .date-custom-panel { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px 18px; margin-top: 10px; display: none; }
+    .loading-overlay { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: rgba(255,255,255,0.7); z-index: 1000; display: none; align-items: center; justify-content: center; }
+    .loading-overlay .spinner-border { color: #2e7d32; width: 3rem; height: 3rem; }
+    .report-tabs { border-bottom: 2px solid #e5e7eb; margin-bottom: 20px; }
+    .report-tab-btn { background: none; border: none; border-bottom: 2px solid transparent; color: #6b7280; font-size: 14px; font-weight: 600; padding: 10px 16px; cursor: pointer; transition: all 0.15s; }
+    .report-tab-btn:hover { color: #111827; }
+    .report-tab-btn.active { color: #2e7d32; border-bottom-color: #2e7d32; }
+    .svg-chart-container { background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; padding: 20px; height: 100%; min-height: 300px; box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
+    .chart-tooltip { position: absolute; background: rgba(0,0,0,0.85); color: #fff; padding: 6px 12px; border-radius: 4px; font-size: 11px; pointer-events: none; display: none; z-index: 1050; box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
+</style>
+
+<div class="reports-container">
+    <div class="loading-overlay" id="reportsLoadingOverlay">
+        <div class="spinner-border" role="status">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+    </div>
+
+    <div class="chart-tooltip" id="chartTooltip"></div>
+
+    <div class="adm-page-header">
+        <div>
+            <h1>Reports & Analytics</h1>
+            <p class="text-muted mb-0">Monitor sales performance, customer trends, and inventory health in real-time.</p>
+        </div>
+        <div>
+            <div class="dropdown">
+                <button class="btn btn-success dropdown-toggle d-flex align-items-center gap-2" type="button" id="exportDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+                    <svg width="16" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                    Export Report (CSV)
+                </button>
+                <ul class="dropdown-menu dropdown-menu-end shadow border-0" aria-labelledby="exportDropdown">
+                    <li><button class="dropdown-item" onclick="triggerCsvExport('sales')">Sales Trend Report</button></li>
+                    <li><button class="dropdown-item" onclick="triggerCsvExport('orders')">Orders Report</button></li>
+                    <li><button class="dropdown-item" onclick="triggerCsvExport('products')">Product Performance Report</button></li>
+                    <li><button class="dropdown-item" onclick="triggerCsvExport('inventory')">Current Inventory Quantities</button></li>
+                    <li><button class="dropdown-item" onclick="triggerCsvExport('adjustments')">Inventory Adjustments Log</button></li>
+                    <li><button class="dropdown-item" onclick="triggerCsvExport('no-sales')">Products with No Sales</button></li>
+                    <li><button class="dropdown-item" onclick="triggerCsvExport('repeat-customers')">Repeat Customers List</button></li>
+                    <li><button class="dropdown-item" onclick="triggerCsvExport('failures-refunds')">Refunds & Failed Payments</button></li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    @* ── Filters ────────────────────────────────────────────────────────────── *@
+    <div class="adm-card mb-4">
+        <div class="p-3 bg-white">
+            <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
+                <div class="filter-btn-group d-flex flex-wrap gap-2" id="filterButtonGroup">
+                    <button type="button" class="btn btn-outline-primary" data-filter="today">Today</button>
+                    <button type="button" class="btn btn-outline-primary" data-filter="yesterday">Yesterday</button>
+                    <button type="button" class="btn btn-outline-primary" data-filter="last7">Last 7 Days</button>
+                    <button type="button" class="btn btn-outline-primary active" data-filter="last30">Last 30 Days</button>
+                    <button type="button" class="btn btn-outline-primary" data-filter="month">This Month</button>
+                    <button type="button" class="btn btn-outline-primary" data-filter="prevmonth">Previous Month</button>
+                    <button type="button" class="btn btn-outline-primary" data-filter="custom">Custom Date Range</button>
+                </div>
+                <div class="text-muted small fw-semibold" id="resolvedDateRangeText">
+                    @if (Model != null)
+                    {
+                        <span>@Model.Filter.StartDate.ToString("dd MMM yyyy") — @Model.Filter.EndDate.ToString("dd MMM yyyy") (UTC)</span>
+                    }
+                </div>
+            </div>
+
+            <div class="date-custom-panel" id="customDatePanel">
+                <div class="row g-3 align-items-end">
+                    <div class="col-12 col-sm-4 col-md-3">
+                        <label for="customStartDate" class="form-label small fw-semibold text-muted">Start Date</label>
+                        <input type="date" class="form-control form-control-sm" id="customStartDate" />
+                    </div>
+                    <div class="col-12 col-sm-4 col-md-3">
+                        <label for="customEndDate" class="form-label small fw-semibold text-muted">End Date</label>
+                        <input type="date" class="form-control form-control-sm" id="customEndDate" />
+                    </div>
+                    <div class="col-12 col-sm-4 col-md-2">
+                        <button type="button" class="btn btn-sm btn-success w-100" id="applyCustomDates">Apply Filter</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @* ── KPI Cards ──────────────────────────────────────────────────────────── *@
+    <div class="row g-3 mb-4">
+        <div class="col-12 col-sm-6 col-lg-3">
+            <div class="adm-stat-card">
+                <div class="stat-label">Gross Sales</div>
+                <div class="stat-value" id="kpiGrossSales">₹@(Model?.GrossSales.ToString("N2") ?? "0.00")</div>
+                <div class="stat-sub">Value of items ordered (excl. cancelled/failed)</div>
+            </div>
+        </div>
+        <div class="col-12 col-sm-6 col-lg-3">
+            <div class="adm-stat-card">
+                <div class="stat-label">Net Sales</div>
+                <div class="stat-value text-success" id="kpiNetSales">₹@(Model?.NetSales.ToString("N2") ?? "0.00")</div>
+                <div class="stat-sub">Gross - Discounts + Delivery Fees</div>
+            </div>
+        </div>
+        <div class="col-12 col-sm-6 col-lg-3">
+            <div class="adm-stat-card">
+                <div class="stat-label">Average Order Value</div>
+                <div class="stat-value" id="kpiAOV">₹@(Model?.AverageOrderValue.ToString("N2") ?? "0.00")</div>
+                <div class="stat-sub">Net Sales / Completed Orders</div>
+            </div>
+        </div>
+        <div class="col-12 col-sm-6 col-lg-3">
+            <div class="adm-stat-card">
+                <div class="stat-label">Total / Completed Orders</div>
+                <div class="stat-value" id="kpiOrders">
+                    <span id="kpiTotalOrders">@(Model?.TotalOrders ?? 0)</span> / <span class="text-success" id="kpiCompletedOrders">@(Model?.CompletedOrders ?? 0)</span>
+                </div>
+                <div class="stat-sub">
+                    Completion rate: <span id="kpiCompletionRate">@(Model != null && Model.TotalOrders > 0 ? ((double)Model.CompletedOrders / Model.TotalOrders * 100).ToString("N1") + "%" : "0.0%")</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-3 mb-4">
+        <div class="col-12 col-md-6 col-lg-4">
+            <div class="adm-stat-card">
+                <div class="stat-label">COD Payment Summary</div>
+                <div class="stat-value text-primary" id="kpiCodSummary">
+                    ₹@(Model?.CodNetSales.ToString("N0") ?? "0")
+                </div>
+                <div class="stat-sub">
+                    Count: <span id="kpiCodCount" class="fw-semibold text-dark">@(Model?.CodOrdersCount ?? 0)</span> orders collected at door
+                </div>
+            </div>
+        </div>
+        <div class="col-12 col-md-6 col-lg-4">
+            <div class="adm-stat-card">
+                <div class="stat-label">Online Payment Summary</div>
+                <div class="stat-value text-info" id="kpiOnlineSummary">
+                    ₹@(Model?.OnlineNetSales.ToString("N0") ?? "0")
+                </div>
+                <div class="stat-sub">
+                    Count: <span id="kpiOnlineCount" class="fw-semibold text-dark">@(Model?.OnlineOrdersCount ?? 0)</span> orders captured online
+                </div>
+            </div>
+        </div>
+        <div class="col-12 col-md-12 col-lg-4">
+            <div class="adm-stat-card">
+                <div class="stat-label">Customer Mix</div>
+                <div class="stat-value text-secondary" id="kpiCustomerMix">
+                    <span id="kpiNewCustomers">@(Model?.NewCustomersCount ?? 0)</span> / <span id="kpiRepeatCustomers">@(Model?.RepeatCustomersCount ?? 0)</span>
+                </div>
+                <div class="stat-sub">
+                    New / Repeat customers ordering in period
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @* ── Visualizations ──────────────────────────────────────────────────────── *@
+    <div class="row g-3 mb-4">
+        <div class="col-12 col-lg-8">
+            <div class="svg-chart-container d-flex flex-column justify-content-between">
+                <h5 class="fw-bold fs-6 mb-3 text-dark">Daily Sales Trend & Order Volume</h5>
+                <div class="flex-grow-1 position-relative" style="min-height: 250px;" id="salesTrendChartWrapper">
+                    <!-- SVG lines drawn via Javascript -->
+                    <svg id="salesTrendSvg" width="100%" height="250" viewBox="0 0 800 250" preserveAspectRatio="none" style="overflow: visible;"></svg>
+                </div>
+            </div>
+        </div>
+        <div class="col-12 col-lg-4">
+            <div class="svg-chart-container d-flex flex-column justify-content-between">
+                <h5 class="fw-bold fs-6 mb-3 text-dark">Category Sales Split</h5>
+                <div class="flex-grow-1 d-flex flex-column justify-content-center" id="categorySplitWrapper" style="gap: 12px;">
+                    <!-- Drawn via Javascript -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @* ── Tabbed Reports ─────────────────────────────────────────────────────── *@
+    <div class="adm-card">
+        <div class="report-tabs px-3 pt-3 bg-white">
+            <div class="d-flex flex-wrap gap-1">
+                <button class="report-tab-btn active" data-tab="best-sellers">Best Sellers</button>
+                <button class="report-tab-btn" data-tab="category-sales">Category Sales</button>
+                <button class="report-tab-btn" data-tab="no-sales">No Sales Products</button>
+                <button class="report-tab-btn" data-tab="stock-alerts">Low/Out of Stock</button>
+                <button class="report-tab-btn" data-tab="current-inventory">Current Inventory</button>
+                <button class="report-tab-btn" data-tab="inventory-adjustments">Stock Adjustments</button>
+                <button class="report-tab-btn" data-tab="orders-report">Orders Log</button>
+                <button class="report-tab-btn" data-tab="failures-refunds">Refunds & Failures</button>
+                <button class="report-tab-btn" data-tab="customer-frequency">Customer Frequencies</button>
+            </div>
+        </div>
+
+        <div class="p-3">
+            @* -- Best Sellers Tab -- *@
+            <div class="tab-content" id="tab-best-sellers">
+                <div class="adm-table-responsive">
+                    <table class="adm-table">
+                        <thead>
+                            <tr>
+                                <th>Product Name</th>
+                                <th>SKU</th>
+                                <th>Category</th>
+                                <th class="text-end">Qty Sold</th>
+                                <th class="text-end">Net Sales</th>
+                                <th class="text-end">Avg Unit Price</th>
+                            </tr>
+                        </thead>
+                        <tbody id="bestSellersTableBody">
+                            @if (Model?.TopSellingProducts != null && Model.TopSellingProducts.Count > 0)
+                            {
+                                foreach (var p in Model.TopSellingProducts)
+                                {
+                                    <tr>
+                                        <td><strong>@p.ProductName</strong></td>
+                                        <td class="text-muted small">@p.SKU</td>
+                                        <td>@p.CategoryName</td>
+                                        <td class="text-end fw-semibold">@p.QuantitySold.ToString("N1")</td>
+                                        <td class="text-end text-success fw-bold">₹@p.NetSales.ToString("N2")</td>
+                                        <td class="text-end text-muted small">₹@p.AverageUnitPrice.ToString("N2")</td>
+                                    </tr>
+                                }
+                            }
+                            else
+                            {
+                                <tr>
+                                    <td colspan="6" class="text-center text-muted py-4">No best sellers found during selected period.</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            @* -- Category Sales Tab -- *@
+            <div class="tab-content d-none" id="tab-category-sales">
+                <div class="adm-table-responsive">
+                    <table class="adm-table">
+                        <thead>
+                            <tr>
+                                <th>Category Name</th>
+                                <th class="text-end">Quantity Sold</th>
+                                <th class="text-end">Net Revenue</th>
+                            </tr>
+                        </thead>
+                        <tbody id="categorySalesTableBody">
+                            <!-- Populated via Javascript -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            @* -- No Sales Tab -- *@
+            <div class="tab-content d-none" id="tab-no-sales">
+                <div class="adm-table-responsive">
+                    <table class="adm-table">
+                        <thead>
+                            <tr>
+                                <th>Product Name</th>
+                                <th>SKU</th>
+                                <th>Category</th>
+                                <th class="text-end">Current Stock</th>
+                                <th class="text-end">Unit Price</th>
+                            </tr>
+                        </thead>
+                        <tbody id="noSalesTableBody">
+                            <!-- Populated via Javascript -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            @* -- Low/Out Stock Alerts Tab -- *@
+            <div class="tab-content d-none" id="tab-stock-alerts">
+                <div class="adm-table-responsive">
+                    <table class="adm-table">
+                        <thead>
+                            <tr>
+                                <th>Product Name</th>
+                                <th>SKU</th>
+                                <th>Category</th>
+                                <th class="text-end">Quantity On Hand</th>
+                                <th class="text-end">Reserved Qty</th>
+                                <th class="text-end">Low Threshold</th>
+                                <th>Alert Type</th>
+                            </tr>
+                        </thead>
+                        <tbody id="stockAlertsTableBody">
+                            <!-- Populated via Javascript -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            @* -- Current Inventory Quantities Tab -- *@
+            <div class="tab-content d-none" id="tab-current-inventory">
+                <div class="adm-table-responsive">
+                    <table class="adm-table">
+                        <thead>
+                            <tr>
+                                <th>Product Name</th>
+                                <th>SKU</th>
+                                <th>Category</th>
+                                <th class="text-end">On Hand</th>
+                                <th class="text-end">Reserved</th>
+                                <th class="text-end">Threshold</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="currentInventoryTableBody">
+                            <!-- Populated via Javascript -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            @* -- Stock Adjustments Tab -- *@
+            <div class="tab-content d-none" id="tab-inventory-adjustments">
+                <div class="adm-table-responsive">
+                    <table class="adm-table">
+                        <thead>
+                            <tr>
+                                <th>Timestamp</th>
+                                <th>Product Name</th>
+                                <th>SKU</th>
+                                <th>Type</th>
+                                <th class="text-end">Qty Change</th>
+                                <th class="text-end">Balance After</th>
+                                <th>Notes</th>
+                                <th>Admin User</th>
+                            </tr>
+                        </thead>
+                        <tbody id="inventoryAdjustmentsTableBody">
+                            <!-- Populated via Javascript -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            @* -- Orders Report Tab -- *@
+            <div class="tab-content d-none" id="tab-orders-report">
+                <div class="row g-2 mb-3 align-items-center">
+                    <div class="col-12 col-sm-4 col-md-3">
+                        <select class="form-select form-select-sm" id="orderStatusFilter">
+                            <option value="">All Statuses</option>
+                            <option value="Pending">Pending</option>
+                            <option value="Confirmed">Confirmed</option>
+                            <option value="Processing">Processing</option>
+                            <option value="OutForDelivery">Out For Delivery</option>
+                            <option value="Delivered">Delivered</option>
+                            <option value="Cancelled">Cancelled</option>
+                            <option value="Refunded">Refunded</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="adm-table-responsive">
+                    <table class="adm-table">
+                        <thead>
+                            <tr>
+                                <th>Order #</th>
+                                <th>Customer Name</th>
+                                <th>Customer Email</th>
+                                <th>Date</th>
+                                <th>Order Status</th>
+                                <th>Payment Method</th>
+                                <th>Payment Status</th>
+                                <th class="text-end">Total Amount</th>
+                            </tr>
+                        </thead>
+                        <tbody id="ordersReportTableBody">
+                            <!-- Populated via Javascript -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            @* -- Failed Payments and Refunds Tab -- *@
+            <div class="tab-content d-none" id="tab-failures-refunds">
+                <div class="adm-table-responsive">
+                    <table class="adm-table">
+                        <thead>
+                            <tr>
+                                <th>Order #</th>
+                                <th>Date</th>
+                                <th>Order Status</th>
+                                <th>Payment Status</th>
+                                <th>Payment Method</th>
+                                <th class="text-end">Amount</th>
+                                <th>Gateway</th>
+                                <th>Failure Reason</th>
+                            </tr>
+                        </thead>
+                        <tbody id="failuresRefundsTableBody">
+                            <!-- Populated via Javascript -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            @* -- Customer Frequency Tab -- *@
+            <div class="tab-content d-none" id="tab-customer-frequency">
+                <div class="adm-table-responsive">
+                    <table class="adm-table">
+                        <thead>
+                            <tr>
+                                <th>Customer Name</th>
+                                <th>Customer Email</th>
+                                <th class="text-end">Total Orders Placed</th>
+                                <th class="text-end">Total Amount Spent</th>
+                                <th class="text-end">Average Order Value</th>
+                                <th>First Order Date</th>
+                                <th>Last Order Date</th>
+                            </tr>
+                        </thead>
+                        <tbody id="customerFrequencyTableBody">
+                            <!-- Populated via Javascript -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+    let currentFilter = 'last30';
+    let currentCustomStart = null;
+    let currentCustomEnd = null;
+    let currentActiveTab = 'best-sellers';
+
+    document.addEventListener('DOMContentLoaded', function () {
+        // Initialize preset filter buttons
+        document.querySelectorAll('#filterButtonGroup button').forEach(btn => {
+            btn.addEventListener('click', function () {
+                document.querySelectorAll('#filterButtonGroup button').forEach(b => b.classList.remove('active'));
+                this.classList.add('active');
+
+                const filter = this.getAttribute('data-filter');
+                currentFilter = filter;
+
+                if (filter === 'custom') {
+                    document.getElementById('customDatePanel').style.display = 'block';
+                } else {
+                    document.getElementById('customDatePanel').style.display = 'none';
+                    currentCustomStart = null;
+                    currentCustomEnd = null;
+                    refreshAllReports();
+                }
+            });
+        });
+
+        // Initialize custom dates apply
+        document.getElementById('applyCustomDates').addEventListener('click', function () {
+            const startVal = document.getElementById('customStartDate').value;
+            const endVal = document.getElementById('customEndDate').value;
+
+            if (!startVal || !endVal) {
+                alert('Please select both start and end dates.');
+                return;
+            }
+
+            currentCustomStart = startVal;
+            currentCustomEnd = endVal;
+            refreshAllReports();
+        });
+
+        // Initialize tabs switching
+        document.querySelectorAll('.report-tab-btn').forEach(btn => {
+            btn.addEventListener('click', function () {
+                document.querySelectorAll('.report-tab-btn').forEach(b => b.classList.remove('active'));
+                this.classList.add('active');
+
+                const tab = this.getAttribute('data-tab');
+                currentActiveTab = tab;
+
+                document.querySelectorAll('.tab-content').forEach(c => c.classList.add('d-none'));
+                document.getElementById('tab-' + tab).classList.remove('d-none');
+
+                lazyLoadTabReport(tab);
+            });
+        });
+
+        // Initialize Orders Status filter dropdown inside the Order Log tab
+        document.getElementById('orderStatusFilter').addEventListener('change', function () {
+            loadTabOrdersReport();
+        });
+
+        // Draw initial charts using SSR model
+        @if (Model != null)
+        {
+            <text>
+            const initialTrends = @Html.Raw(Json.Serialize(Model.DailySalesTrends));
+            const initialCategories = @Html.Raw(Json.Serialize(Model.SalesByCategory));
+            const initialDistribution = @Html.Raw(Json.Serialize(Model.PaymentMethodDistribution));
+            drawDailySalesChart(initialTrends);
+            drawCategorySplitChart(initialCategories);
+            </text>
+        }
+    });
+
+    // Helper to format currency values
+    function formatCurrency(val) {
+        return '₹' + parseFloat(val || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    // Refresh all reports
+    function refreshAllReports() {
+        showLoading(true);
+
+        const url = `/admin/reports/api/dashboard?filter=${currentFilter}` +
+                    (currentCustomStart ? `&start=${currentCustomStart}` : '') +
+                    (currentCustomEnd ? `&end=${currentCustomEnd}` : '');
+
+        fetch(url)
+            .then(res => {
+                if (!res.ok) throw new Error('Failed to retrieve dashboard reports.');
+                return res.json();
+            })
+            .then(data => {
+                // Update dates label
+                const sDate = new Date(data.filter.startDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+                const eDate = new Date(data.filter.endDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+                document.getElementById('resolvedDateRangeText').textContent = `${sDate} — ${eDate} (UTC)`;
+
+                // Update KPIs
+                document.getElementById('kpiGrossSales').textContent = formatCurrency(data.grossSales);
+                document.getElementById('kpiNetSales').textContent = formatCurrency(data.netSales);
+                document.getElementById('kpiAOV').textContent = formatCurrency(data.averageOrderValue);
+                document.getElementById('kpiTotalOrders').textContent = data.totalOrders;
+                document.getElementById('kpiCompletedOrders').textContent = data.completedOrders;
+
+                const compRate = data.totalOrders > 0 ? ((data.completedOrders / data.totalOrders) * 100).toFixed(1) + '%' : '0.0%';
+                document.getElementById('kpiCompletionRate').textContent = compRate;
+
+                // Update payment cards
+                document.getElementById('kpiCodSummary').textContent = '₹' + parseFloat(data.codNetSales || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 });
+                document.getElementById('kpiCodCount').textContent = data.codOrdersCount;
+                document.getElementById('kpiOnlineSummary').textContent = '₹' + parseFloat(data.onlineNetSales || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 });
+                document.getElementById('kpiOnlineCount').textContent = data.onlineOrdersCount;
+
+                // Customer mix
+                document.getElementById('kpiNewCustomers').textContent = data.newCustomersCount;
+                document.getElementById('kpiRepeatCustomers').textContent = data.repeatCustomersCount;
+
+                // Populate Best Sellers Table
+                populateBestSellersTable(data.topSellingProducts);
+
+                // Redraw Visualizations
+                drawDailySalesChart(data.dailySalesTrends);
+                drawCategorySplitChart(data.salesByCategory);
+
+                // Lazy load currently active tab's sub-report if it's not best sellers
+                if (currentActiveTab !== 'best-sellers') {
+                    lazyLoadTabReport(currentActiveTab);
+                }
+
+                showLoading(false);
+            })
+            .catch(err => {
+                console.error(err);
+                alert(err.message || 'An error occurred while loading reports.');
+                showLoading(false);
+            });
+    }
+
+    function showLoading(show) {
+        document.getElementById('reportsLoadingOverlay').style.display = show ? 'flex' : 'none';
+    }
+
+    function triggerCsvExport(reportType) {
+        let exportUrl = `/admin/reports/export/${reportType}?filter=${currentFilter}` +
+                        (currentCustomStart ? `&start=${currentCustomStart}` : '') +
+                        (currentCustomEnd ? `&end=${currentCustomEnd}` : '');
+
+        if (reportType === 'orders') {
+            const status = document.getElementById('orderStatusFilter').value;
+            if (status) exportUrl += `&status=${status}`;
+        }
+
+        window.location.href = exportUrl;
+    }
+
+    function lazyLoadTabReport(tab) {
+        if (tab === 'best-sellers') return;
+
+        if (tab === 'category-sales') loadTabCategorySales();
+        else if (tab === 'no-sales') loadTabNoSales();
+        else if (tab === 'stock-alerts') loadTabStockAlerts();
+        else if (tab === 'current-inventory') loadTabCurrentInventory();
+        else if (tab === 'inventory-adjustments') loadTabInventoryAdjustments();
+        else if (tab === 'orders-report') loadTabOrdersReport();
+        else if (tab === 'failures-refunds') loadTabFailuresRefunds();
+        else if (tab === 'customer-frequency') loadTabCustomerFrequency();
+    }
+
+    function populateBestSellersTable(products) {
+        const tbody = document.getElementById('bestSellersTableBody');
+        tbody.innerHTML = '';
+        if (!products || products.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4">No best sellers found during selected period.</td></tr>';
+            return;
+        }
+        products.forEach(p => {
+            tbody.innerHTML += `
+                <tr>
+                    <td><strong>${escapeHtml(p.productName)}</strong></td>
+                    <td class="text-muted small">${escapeHtml(p.sku)}</td>
+                    <td>${escapeHtml(p.categoryName)}</td>
+                    <td class="text-end fw-semibold">${parseFloat(p.quantitySold).toFixed(1)}</td>
+                    <td class="text-end text-success fw-bold">${formatCurrency(p.netSales)}</td>
+                    <td class="text-end text-muted small">${formatCurrency(p.averageUnitPrice)}</td>
+                </tr>
+            `;
+        });
+    }
+
+    function loadTabCategorySales() {
+        const tbody = document.getElementById('categorySalesTableBody');
+        tbody.innerHTML = '<tr><td colspan="3" class="text-center py-4"><span class="spinner-border spinner-border-sm text-success"></span> Loading...</td></tr>';
+
+        const url = `/admin/reports/api/dashboard?filter=${currentFilter}` +
+                    (currentCustomStart ? `&start=${currentCustomStart}` : '') +
+                    (currentCustomEnd ? `&end=${currentCustomEnd}` : '');
+
+        fetch(url)
+            .then(res => res.json())
+            .then(data => {
+                tbody.innerHTML = '';
+                if (!data.salesByCategory || data.salesByCategory.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="3" class="text-center text-muted py-4">No category sales found.</td></tr>';
+                    return;
+                }
+                data.salesByCategory.forEach(c => {
+                    tbody.innerHTML += `
+                        <tr>
+                            <td><strong>${escapeHtml(c.categoryName)}</strong></td>
+                            <td class="text-end fw-semibold">${parseInt(c.quantitySold).toLocaleString()}</td>
+                            <td class="text-end text-success fw-bold">${formatCurrency(c.netSales)}</td>
+                        </tr>
+                    `;
+                });
+            });
+    }
+
+    function loadTabNoSales() {
+        const tbody = document.getElementById('noSalesTableBody');
+        tbody.innerHTML = '<tr><td colspan="5" class="text-center py-4"><span class="spinner-border spinner-border-sm text-success"></span> Loading...</td></tr>';
+
+        const url = `/admin/reports/api/no-sales?filter=${currentFilter}` +
+                    (currentCustomStart ? `&start=${currentCustomStart}` : '') +
+                    (currentCustomEnd ? `&end=${currentCustomEnd}` : '');
+
+        fetch(url)
+            .then(res => res.json())
+            .then(data => {
+                tbody.innerHTML = '';
+                if (!data || data.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-4">All active products had sales during this period!</td></tr>';
+                    return;
+                }
+                data.forEach(p => {
+                    tbody.innerHTML += `
+                        <tr>
+                            <td><strong>${escapeHtml(p.productName)}</strong></td>
+                            <td class="text-muted small">${escapeHtml(p.sku)}</td>
+                            <td>${escapeHtml(p.categoryName)}</td>
+                            <td class="text-end text-danger fw-bold">${parseFloat(p.quantityOnHand).toFixed(1)}</td>
+                            <td class="text-end fw-semibold">₹${parseFloat(p.price).toFixed(2)}</td>
+                        </tr>
+                    `;
+                });
+            });
+    }
+
+    function loadTabStockAlerts() {
+        const tbody = document.getElementById('stockAlertsTableBody');
+        tbody.innerHTML = '<tr><td colspan="7" class="text-center py-4"><span class="spinner-border spinner-border-sm text-success"></span> Loading...</td></tr>';
+
+        fetch('/admin/reports/api/inventory-quantities')
+            .then(res => res.json())
+            .then(data => {
+                tbody.innerHTML = '';
+                const alerts = data.filter(i => i.isLowStock || i.isOutOfStock);
+                if (alerts.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="7" class="text-center text-success py-4">🎉 Excellent! No products are currently low or out of stock!</td></tr>';
+                    return;
+                }
+                alerts.forEach(i => {
+                    const badgeClass = i.isOutOfStock ? 'adm-badge-cancelled' : 'adm-badge-pending';
+                    const label = i.isOutOfStock ? 'Out of Stock' : 'Low Stock Alert';
+                    tbody.innerHTML += `
+                        <tr>
+                            <td><strong>${escapeHtml(i.productName)}</strong></td>
+                            <td class="text-muted small">${escapeHtml(i.sku)}</td>
+                            <td>${escapeHtml(i.categoryName)}</td>
+                            <td class="text-end fw-bold text-dark">${parseFloat(i.quantityOnHand).toFixed(1)}</td>
+                            <td class="text-end text-muted small">${parseFloat(i.reservedQuantity).toFixed(1)}</td>
+                            <td class="text-end text-muted small">${parseFloat(i.lowStockThreshold).toFixed(1)}</td>
+                            <td><span class="adm-badge ${badgeClass}">${label}</span></td>
+                        </tr>
+                    `;
+                });
+            });
+    }
+
+    function loadTabCurrentInventory() {
+        const tbody = document.getElementById('currentInventoryTableBody');
+        tbody.innerHTML = '<tr><td colspan="7" class="text-center py-4"><span class="spinner-border spinner-border-sm text-success"></span> Loading...</td></tr>';
+
+        fetch('/admin/reports/api/inventory-quantities')
+            .then(res => res.json())
+            .then(data => {
+                tbody.innerHTML = '';
+                if (!data || data.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-4">No products in inventory.</td></tr>';
+                    return;
+                }
+                data.forEach(i => {
+                    let badgeClass = 'adm-badge-active';
+                    let label = 'Healthy';
+                    if (i.isOutOfStock) {
+                        badgeClass = 'adm-badge-cancelled';
+                        label = 'Out of Stock';
+                    } else if (i.isLowStock) {
+                        badgeClass = 'adm-badge-pending';
+                        label = 'Low Stock';
+                    }
+                    tbody.innerHTML += `
+                        <tr>
+                            <td><strong>${escapeHtml(i.productName)}</strong></td>
+                            <td class="text-muted small">${escapeHtml(i.sku)}</td>
+                            <td>${escapeHtml(i.categoryName)}</td>
+                            <td class="text-end fw-bold text-dark">${parseFloat(i.quantityOnHand).toFixed(1)}</td>
+                            <td class="text-end text-muted small">${parseFloat(i.reservedQuantity).toFixed(1)}</td>
+                            <td class="text-end text-muted small">${parseFloat(i.lowStockThreshold).toFixed(1)}</td>
+                            <td><span class="adm-badge ${badgeClass}">${label}</span></td>
+                        </tr>
+                    `;
+                });
+            });
+    }
+
+    function loadTabInventoryAdjustments() {
+        const tbody = document.getElementById('inventoryAdjustmentsTableBody');
+        tbody.innerHTML = '<tr><td colspan="8" class="text-center py-4"><span class="spinner-border spinner-border-sm text-success"></span> Loading...</td></tr>';
+
+        const url = `/admin/reports/api/inventory-adjustments?filter=${currentFilter}` +
+                    (currentCustomStart ? `&start=${currentCustomStart}` : '') +
+                    (currentCustomEnd ? `&end=${currentCustomEnd}` : '');
+
+        fetch(url)
+            .then(res => res.json())
+            .then(data => {
+                tbody.innerHTML = '';
+                if (!data || data.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-4">No inventory adjustment transactions recorded.</td></tr>';
+                    return;
+                }
+                data.forEach(tx => {
+                    const dt = new Date(tx.createdAt).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+                    tbody.innerHTML += `
+                        <tr>
+                            <td class="text-muted small">${dt}</td>
+                            <td><strong>${escapeHtml(tx.productName)}</strong></td>
+                            <td class="text-muted small">${escapeHtml(tx.sku)}</td>
+                            <td><span class="adm-badge adm-badge-confirmed">${escapeHtml(tx.transactionType)}</span></td>
+                            <td class="text-end fw-bold ${tx.quantityChange < 0 ? 'text-danger' : 'text-success'}">
+                                ${tx.quantityChange > 0 ? '+' : ''}${parseFloat(tx.quantityChange).toFixed(1)}
+                            </td>
+                            <td class="text-end text-muted fw-semibold">${parseFloat(tx.quantityAfter).toFixed(1)}</td>
+                            <td><em class="small text-muted">${escapeHtml(tx.notes || '-')}</em></td>
+                            <td class="small">${escapeHtml(tx.createdBy || 'System')}</td>
+                        </tr>
+                    `;
+                });
+            });
+    }
+
+    function loadTabOrdersReport() {
+        const tbody = document.getElementById('ordersReportTableBody');
+        tbody.innerHTML = '<tr><td colspan="8" class="text-center py-4"><span class="spinner-border spinner-border-sm text-success"></span> Loading...</td></tr>';
+
+        const status = document.getElementById('orderStatusFilter').value;
+        const url = `/admin/reports/api/orders?filter=${currentFilter}` +
+                    (currentCustomStart ? `&start=${currentCustomStart}` : '') +
+                    (currentCustomEnd ? `&end=${currentCustomEnd}` : '') +
+                    (status ? `&status=${status}` : '');
+
+        fetch(url)
+            .then(res => res.json())
+            .then(data => {
+                tbody.innerHTML = '';
+                if (!data || data.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-4">No matching orders found.</td></tr>';
+                    return;
+                }
+                data.forEach(o => {
+                    const dt = new Date(o.createdAt).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+                    tbody.innerHTML += `
+                        <tr>
+                            <td><strong>#${escapeHtml(o.orderNumber)}</strong></td>
+                            <td>${escapeHtml(o.customerName)}</td>
+                            <td class="text-muted small">${escapeHtml(o.customerEmail)}</td>
+                            <td class="small text-muted">${dt}</td>
+                            <td><span class="adm-badge adm-badge-${o.status.toLowerCase().Replace(" ", "_")}">${o.status}</span></td>
+                            <td><span class="small fw-semibold text-secondary">${escapeHtml(o.paymentMethod)}</span></td>
+                            <td><span class="adm-badge adm-badge-${o.paymentStatus.toLowerCase()}">${o.paymentStatus}</span></td>
+                            <td class="text-end fw-bold text-dark">₹${parseFloat(o.totalAmount).toFixed(2)}</td>
+                        </tr>
+                    `;
+                });
+            });
+    }
+
+    function loadTabFailuresRefunds() {
+        const tbody = document.getElementById('failuresRefundsTableBody');
+        tbody.innerHTML = '<tr><td colspan="8" class="text-center py-4"><span class="spinner-border spinner-border-sm text-success"></span> Loading...</td></tr>';
+
+        const url = `/admin/reports/api/failures-refunds?filter=${currentFilter}` +
+                    (currentCustomStart ? `&start=${currentCustomStart}` : '') +
+                    (currentCustomEnd ? `&end=${currentCustomEnd}` : '');
+
+        fetch(url)
+            .then(res => res.json())
+            .then(data => {
+                tbody.innerHTML = '';
+                if (!data || data.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="8" class="text-center text-success py-4">🎉 Excellent! No failed payments or refunds during this period!</td></tr>';
+                    return;
+                }
+                data.forEach(r => {
+                    const dt = new Date(r.createdAt).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+                    tbody.innerHTML += `
+                        <tr>
+                            <td><strong>#${escapeHtml(r.orderNumber)}</strong></td>
+                            <td class="small text-muted">${dt}</td>
+                            <td><span class="adm-badge adm-badge-${r.orderStatus.toLowerCase()}">${r.orderStatus}</span></td>
+                            <td><span class="adm-badge adm-badge-${r.paymentStatus.toLowerCase()}">${r.paymentStatus}</span></td>
+                            <td><span class="small fw-semibold">${escapeHtml(r.paymentMethod)}</span></td>
+                            <td class="text-end fw-bold text-dark">₹${parseFloat(r.totalAmount).toFixed(2)}</td>
+                            <td class="small fw-semibold text-muted">${escapeHtml(r.gatewayName || '-')}</td>
+                            <td><em class="small text-danger">${escapeHtml(r.failureReason || '-')}</em></td>
+                        </tr>
+                    `;
+                });
+            });
+    }
+
+    function loadTabCustomerFrequency() {
+        const tbody = document.getElementById('customerFrequencyTableBody');
+        tbody.innerHTML = '<tr><td colspan="7" class="text-center py-4"><span class="spinner-border spinner-border-sm text-success"></span> Loading...</td></tr>';
+
+        const url = `/admin/reports/api/repeat-customers?filter=${currentFilter}` +
+                    (currentCustomStart ? `&start=${currentCustomStart}` : '') +
+                    (currentCustomEnd ? `&end=${currentCustomEnd}` : '');
+
+        fetch(url)
+            .then(res => res.json())
+            .then(data => {
+                tbody.innerHTML = '';
+                if (!data || data.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-4">No ordering customer frequencies found.</td></tr>';
+                    return;
+                }
+                data.forEach(c => {
+                    const firstDate = new Date(c.firstOrderDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+                    const lastDate = new Date(c.lastOrderDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+                    tbody.innerHTML += `
+                        <tr>
+                            <td><strong>${escapeHtml(c.customerName)}</strong></td>
+                            <td class="text-muted small">${escapeHtml(c.customerEmail)}</td>
+                            <td class="text-end fw-bold text-dark">${parseInt(c.totalOrders)}</td>
+                            <td class="text-end text-success fw-bold">${formatCurrency(c.totalSpent)}</td>
+                            <td class="text-end text-muted fw-semibold">${formatCurrency(c.averageOrderValue)}</td>
+                            <td class="small text-muted">${firstDate}</td>
+                            <td class="small text-muted">${lastDate}</td>
+                        </tr>
+                    `;
+                });
+            });
+    }
+
+    // ── SVG Chart Engines ─────────────────────────────────────────────────────
+
+    function drawDailySalesChart(trends) {
+        const svg = document.getElementById('salesTrendSvg');
+        svg.innerHTML = '';
+
+        if (!trends || trends.length === 0) {
+            svg.innerHTML = '<text x="400" y="125" text-anchor="middle" fill="#6b7280" font-weight="600">No trend data available for selected period.</text>';
+            return;
+        }
+
+        const width = 800;
+        const height = 250;
+        const padding = { top: 30, right: 40, bottom: 40, left: 60 };
+
+        const maxSales = Math.max(...trends.map(t => t.netSales), 5000);
+        const maxOrders = Math.max(...trends.map(t => t.orderCount), 5);
+
+        // Helper coords converter
+        const getX = (index) => padding.left + (index / (trends.length - 1 || 1)) * (width - padding.left - padding.right);
+        const getYLine = (val) => height - padding.bottom - (val / maxSales) * (height - padding.top - padding.bottom);
+        const getYBar = (val) => (val / maxOrders) * (height - padding.top - padding.bottom);
+
+        // Draw axes and grid lines
+        let grids = '';
+        for (let i = 0; i <= 4; i++) {
+            const y = padding.top + (i / 4) * (height - padding.top - padding.bottom);
+            const labelValue = maxSales - (i / 4) * maxSales;
+            grids += `
+                <line x1="${padding.left}" y1="${y}" x2="${width - padding.right}" y2="${y}" stroke="#f3f4f6" stroke-width="1.5" />
+                <text x="${padding.left - 10}" y="${y + 4}" text-anchor="end" fill="#6b7280" font-size="10">₹${Math.round(labelValue).toLocaleString()}</text>
+            `;
+        }
+        svg.innerHTML += grids;
+
+        // Draw dates labels
+        let datesLabels = '';
+        const modulo = Math.ceil(trends.length / 8);
+        trends.forEach((t, i) => {
+            if (i % modulo === 0 || i === trends.length - 1) {
+                const x = getX(i);
+                const dt = new Date(t.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
+                datesLabels += `
+                    <text x="${x}" y="${height - 10}" text-anchor="middle" fill="#6b7280" font-size="10">${dt}</text>
+                    <line x1="${x}" y1="${height - padding.bottom}" x2="${x}" y2="${height - padding.bottom + 5}" stroke="#d1d5db" stroke-width="1" />
+                `;
+            }
+        });
+        svg.innerHTML += datesLabels;
+
+        // Draw order count bars (background, semi-transparent)
+        const barWidth = Math.max(2, (width - padding.left - padding.right) / (trends.length * 2));
+        let bars = '';
+        trends.forEach((t, i) => {
+            const x = getX(i) - barWidth / 2;
+            const barHeight = getYBar(t.orderCount);
+            const y = height - padding.bottom - barHeight;
+            bars += `
+                <rect x="${x}" y="${y}" width="${barWidth}" height="${barHeight}" fill="#e0f2fe" opacity="0.8" rx="2"
+                      onmouseover="showChartTooltip(event, '${escapeHtml(new Date(t.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }))}<br/>Orders: <b>${t.orderCount}</b>')"
+                      onmouseout="hideChartTooltip()" />
+            `;
+        });
+        svg.innerHTML += bars;
+
+        // Draw Sales line
+        let pathD = '';
+        trends.forEach((t, i) => {
+            const x = getX(i);
+            const y = getYLine(t.netSales);
+            pathD += `${i === 0 ? 'M' : 'L'} ${x} ${y}`;
+        });
+
+        // Add sales area under line
+        if (trends.length > 1) {
+            const areaD = `${pathD} L ${getX(trends.length - 1)} ${height - padding.bottom} L ${getX(0)} ${height - padding.bottom} Z`;
+            svg.innerHTML += `<path d="${areaD}" fill="url(#salesAreaGradient)" opacity="0.15" />`;
+        }
+
+        // Add SVG definitions (gradients)
+        svg.innerHTML += `
+            <defs>
+                <linearGradient id="salesAreaGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stop-color="#2e7d32" />
+                    <stop offset="100%" stop-color="#2e7d32" stop-opacity="0" />
+                </linearGradient>
+            </defs>
+        `;
+
+        svg.innerHTML += `<path d="${pathD}" fill="none" stroke="#2e7d32" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />`;
+
+        // Draw interactive sales data points
+        let dots = '';
+        trends.forEach((t, i) => {
+            const x = getX(i);
+            const y = getYLine(t.netSales);
+            dots += `
+                <circle cx="${x}" cy="${y}" r="5" fill="#fff" stroke="#2e7d32" stroke-width="3" style="cursor: pointer;"
+                        onmouseover="showChartTooltip(event, '${escapeHtml(new Date(t.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }))}<br/>Sales: <b>₹${parseFloat(t.netSales).toFixed(2)}</b>')"
+                        onmouseout="hideChartTooltip()" />
+            `;
+        });
+        svg.innerHTML += dots;
+    }
+
+    function drawCategorySplitChart(categories) {
+        const wrapper = document.getElementById('categorySplitWrapper');
+        wrapper.innerHTML = '';
+
+        if (!categories || categories.length === 0) {
+            wrapper.innerHTML = '<p class="text-center text-muted mb-0 py-4">No category sales recorded during this period.</p>';
+            return;
+        }
+
+        const maxSales = Math.max(...categories.map(c => c.netSales), 1);
+        const totalSales = categories.reduce((sum, c) => sum + c.netSales, 0);
+
+        categories.slice(0, 5).forEach(c => {
+            const pctOfMax = (c.netSales / maxSales) * 100;
+            const pctOfTotal = totalSales > 0 ? ((c.netSales / totalSales) * 100).toFixed(1) : '0.0';
+            wrapper.innerHTML += `
+                <div class="mb-1">
+                    <div class="d-flex justify-content-between text-dark small fw-semibold mb-1">
+                        <span>${escapeHtml(c.categoryName)}</span>
+                        <span>₹${parseFloat(c.netSales).toLocaleString('en-IN', { maximumFractionDigits: 0 })} (${pctOfTotal}%)</span>
+                    </div>
+                    <div class="progress" style="height: 12px; background-color: #f3f4f6; border-radius: 6px; overflow: hidden;">
+                        <div class="progress-bar" role="progressbar" style="width: ${pctOfMax}%; background-color: #2e7d32; border-radius: 6px;" aria-valuenow="${pctOfMax}" aria-valuemin="0" aria-valuemax="100"></div>
+                    </div>
+                </div>
+            `;
+        });
+
+        if (categories.length > 5) {
+            const othersSum = categories.slice(5).reduce((sum, c) => sum + c.netSales, 0);
+            const pctOfTotal = totalSales > 0 ? ((othersSum / totalSales) * 100).toFixed(1) : '0.0';
+            const pctOfMax = (othersSum / maxSales) * 100;
+            wrapper.innerHTML += `
+                <div class="mb-1">
+                    <div class="d-flex justify-content-between text-muted small fw-semibold mb-1">
+                        <span>Other Categories</span>
+                        <span>₹${parseFloat(othersSum).toLocaleString('en-IN', { maximumFractionDigits: 0 })} (${pctOfTotal}%)</span>
+                    </div>
+                    <div class="progress" style="height: 12px; background-color: #f3f4f6; border-radius: 6px; overflow: hidden;">
+                        <div class="progress-bar" role="progressbar" style="width: ${pctOfMax}%; background-color: #9ca3af; border-radius: 6px;" aria-valuenow="${pctOfMax}" aria-valuemin="0" aria-valuemax="100"></div>
+                    </div>
+                </div>
+            `;
+        }
+    }
+
+    function showChartTooltip(e, text) {
+        const tooltip = document.getElementById('chartTooltip');
+        tooltip.innerHTML = text;
+        tooltip.style.display = 'block';
+
+        // Position tooltip relative to mouse
+        const xOffset = 15;
+        const yOffset = -40;
+        tooltip.style.left = (e.pageX + xOffset) + 'px';
+        tooltip.style.top = (e.pageY + yOffset) + 'px';
+    }
+
+    function hideChartTooltip() {
+        document.getElementById('chartTooltip').style.display = 'none';
+    }
+
+    function escapeHtml(str) {
+        if (!str) return '';
+        return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+    }
+</script>
+}

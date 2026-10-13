@@ -1,0 +1,46 @@
+@model GOLISMart.Web.Models.CartViewModel
+@{
+    ViewData["Title"] = "Your Cart";
+    var cart = Model.Cart;
+    var hasItems = cart?.Items?.Count > 0;
+}
+
+@* Flash messages *@
+@if (TempData["CartSuccess"] is string successMsg)
+{
+    <div class="gm-flash-success" role="alert">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+        @successMsg
+    </div>
+}
+@if (TempData["CartError"] is string errorMsg)
+{
+    <div class="gm-flash-error" role="alert">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        @errorMsg
+    </div>
+}
+
+<div class="container py-4">
+    <div class="gm-cart-page">
+
+        @* Page heading *@
+        <h1 class="h4 fw-bold mb-4" style="color:var(--gm-text);">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="width:22px;height:22px;vertical-align:middle;margin-right:8px;">
+                <circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/>
+                <path d="M1 1h4l2.68 13.39a2 2 0 001.97 1.61h9.72a2 2 0 001.97-1.61L23 6H6"/>
+            </svg>
+            Your Cart
+            <span id="gm-cart-title-count" style="font-size:.85rem;font-weight:400;color:var(--gm-text-muted);margin-left:8px;">
+                @if (hasItems)
+                {
+                    @:(@cart!.TotalItems item@(cart.TotalItems != 1 ? "s" : ""))
+                }
+            </span>
+        </h1>
+
+        <div id="gm-cart-main-container">
+            @await Html.PartialAsync("_CartContent", Model)
+        </div>
+    </div>
+</div>

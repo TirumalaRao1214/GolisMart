@@ -1,0 +1,149 @@
+@model AdminOrderDetailViewModel
+@{
+    Layout = "~/Views/Admin/_AdminLayout.cshtml";
+    var o = Model.Order;
+    ViewData["Title"] = o is not null ? $"Order #{o.OrderNumber}" : "Order Detail";
+}
+
+<div class="adm-page-header">
+    <h1>@ViewData["Title"]</h1>
+    <a asp-controller="AdminOrders" asp-action="Index" class="btn btn-outline-secondary btn-sm">← Orders</a>
+</div>
+
+@if (!Model.ApiAvailable || o is null)
+{
+    <div class="alert alert-warning">Order not found or API unavailable.</div>
+}
+else
+{
+    <div class="row g-3">
+        <div class="col-md-8">
+
+            @* ── Summary ─────────────────────────────────────────────────── *@
+            <div class="adm-card mb-3">
+                <div class="adm-card-header">Order Summary</div>
+                <div class="p-3">
+                    <div class="row g-2">
+                        <div class="col-6 col-md-3"><div class="text-muted small">Order #</div><strong>#@o.OrderNumber</strong></div>
+                        <div class="col-6 col-md-3">
+                            <div class="text-muted small">Status</div>
+                            <span class="adm-badge adm-badge-@o.Status.ToLower().Replace(" ", "_")">@o.Status</span>
+                        </div>
+                        <div class="col-6 col-md-3"><div class="text-muted small">Payment</div>@o.PaymentMethod</div>
+                        <div class="col-6 col-md-3">
+                            <div class="text-muted small">Payment Status</div>
+                            <span class="adm-badge @(o.PaymentStatus == "Paid" ? "adm-badge-paid" : "adm-badge-unpaid")">@o.PaymentStatus</span>
+                        </div>
+                    </div>
+                    <hr class="my-2" />
+                    <div class="row g-2">
+                        <div class="col-12 col-md-6">
+                            <div class="text-muted small">Customer</div>
+                            <div>@o.CustomerName &lt;@o.CustomerEmail&gt;</div>
+                        </div>
+                        <div class="col-12 col-md-6">
+                            <div class="text-muted small">Delivery Address</div>
+                            <div>@o.DeliveryAddress</div>
+                        </div>
+                    </div>
+                    @if (!string.IsNullOrEmpty(o.Notes))
+                    {
+                        <hr class="my-2" />
+                        <div class="text-muted small">Notes</div>
+                        <div>@o.Notes</div>
+                    }
+                </div>
+            </div>
+
+            @* ── Items ────────────────────────────────────────────────────── *@
+            <div class="adm-card mb-3">
+                <div class="adm-card-header">Items (@o.Items.Count)</div>
+                <div class="adm-table-responsive">
+                    <table class="adm-table">
+                        <thead>
+                            <tr>
+                                <th>Product</th>
+                                <th>SKU</th>
+                                <th>Qty</th>
+                                <th>Unit Price</th>
+                                <th>Line Total</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var item in o.Items)
+                            {
+                                <tr>
+                                    <td>@item.ProductName<br /><small class="text-muted">@item.UnitLabel</small></td>
+                                    <td class="text-muted small">@item.ProductSKU</td>
+                                    <td>@item.Quantity</td>
+                                    <td>₹@item.EffectivePrice.ToString("N2")</td>
+                                    <td>₹@item.LineTotal.ToString("N2")</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+                <div class="p-3 border-top text-end">
+                    <div class="text-muted small">Subtotal: ₹@o.SubTotal.ToString("N2")</div>
+                    <div class="text-muted small">Delivery: ₹@o.DeliveryFee.ToString("N2")</div>
+                    @if (o.DiscountAmount > 0)
+                    {
+                        <div class="text-muted small text-success">Discount: -₹@o.DiscountAmount.ToString("N2")</div>
+                    }
+                    <div class="fw-bold">Total: ₹@o.TotalAmount.ToString("N2")</div>
+                </div>
+            </div>
+
+            @* ── Status History ───────────────────────────────────────────── *@
+            @if (o.StatusHistory.Count > 0)
+            {
+                <div class="adm-card">
+                    <div class="adm-card-header">Status History</div>
+                    <div class="adm-table-responsive">
+                        <table class="adm-table">
+                            <thead><tr><th>Status</th><th>Notes</th><th>Changed At</th></tr></thead>
+                            <tbody>
+                                @foreach (var h in o.StatusHistory.OrderByDescending(x => x.ChangedAt))
+                                {
+                                    <tr>
+                                        <td><span class="adm-badge adm-badge-@h.Status.ToLower().Replace(" ", "_")">@h.Status</span></td>
+                                        <td class="text-muted">@(h.Notes ?? "—")</td>
+                                        <td class="text-muted small">@h.ChangedAt.ToString("dd MMM yyyy, HH:mm")</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            }
+        </div>
+
+        <div class="col-md-4">
+            @* ── Update Status ────────────────────────────────────────────── *@
+            <div class="adm-card">
+                <div class="adm-card-header">Update Status</div>
+                <div class="p-3">
+                    <form asp-controller="AdminOrders" asp-action="UpdateStatus" asp-route-id="@o.OrderId" method="post">
+                        @Html.AntiForgeryToken()
+                        <div class="mb-3">
+                            <label class="form-label small">New Status</label>
+                            <select name="NewStatus" class="form-select form-select-sm">
+                                <option value="">— Select —</option>
+                                @foreach (var st in new[] { "Pending", "Confirmed", "Preparing", "Out for Delivery", "Delivered", "Cancelled" })
+                                {
+                                    <option value="@st" selected="@(o.Status == st)">@st</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label small">Notes (optional)</label>
+                            <textarea name="StatusNotes" class="form-control form-control-sm" rows="2"
+                                      placeholder="Reason or note…"></textarea>
+                        </div>
+                        <button type="submit" class="btn btn-primary btn-sm w-100">Update Status</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+}

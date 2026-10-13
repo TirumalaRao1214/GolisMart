@@ -1,0 +1,84 @@
+@* _Footer.cshtml — redesigned dark footer *@
+<footer class="gm-footer">
+    <div class="container">
+        <div class="row g-5">
+            @* Brand column *@
+            <div class="col-12 col-md-4 col-lg-3">
+                <div class="gm-footer-logo-text">GOLIS Mart</div>
+                <p class="gm-footer-brand-text">
+                    Fresh groceries delivered to your door, every day. Quality you can trust, prices you'll love.
+                </p>
+                <div class="d-flex align-items-center gap-2 mt-3" style="color:#9ca3af;font-size:.8rem;">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+                    India
+                </div>
+            </div>
+
+            @* Shop column *@
+            <div class="col-6 col-md-2">
+                <h6>Shop</h6>
+                <ul>
+                    <li><a asp-controller="Catalog" asp-action="Index">All Products</a></li>
+                    <li><a asp-controller="Catalog" asp-action="Category" asp-route-slug="fresh-vegetables">Vegetables</a></li>
+                    <li><a asp-controller="Catalog" asp-action="Category" asp-route-slug="fresh-fruits">Fruits</a></li>
+                    <li><a asp-controller="Catalog" asp-action="Category" asp-route-slug="dairy-and-eggs">Dairy &amp; Eggs</a></li>
+                    <li><a asp-controller="Catalog" asp-action="Category" asp-route-slug="rice-and-atta">Rice &amp; Atta</a></li>
+                </ul>
+            </div>
+
+            @* Support column *@
+            <div class="col-6 col-md-2">
+                <h6>Support</h6>
+                <ul>
+                    <li><a href="#">Help Centre</a></li>
+                    <li><a href="#">Track Order</a></li>
+                    <li><a href="#">Returns Policy</a></li>
+                    <li><a href="#">Contact Us</a></li>
+                    <li><a href="#">FAQs</a></li>
+                </ul>
+            </div>
+
+            @* Legal column *@
+            <div class="col-6 col-md-2">
+                <h6>Legal</h6>
+                <ul>
+                    <li><a asp-controller="Home" asp-action="Privacy">Privacy Policy</a></li>
+                    <li><a href="#">Terms of Service</a></li>
+                    <li><a href="#">Cookie Policy</a></li>
+                    <li><a href="#">Refund Policy</a></li>
+                </ul>
+            </div>
+
+            @* Contact column *@
+            <div class="col-6 col-md-2">
+                <h6>Contact</h6>
+                <ul>
+                    <li>
+                        <a href="mailto:hello@golismart.in" style="display:flex;align-items:center;gap:6px;">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+                            hello@golismart.in
+                        </a>
+                    </li>
+                    <li>
+                        <a href="tel:+918000000000" style="display:flex;align-items:center;gap:6px;">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 13.6 19.79 19.79 0 0 1 1.61 5.05 2 2 0 0 1 3.6 3h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 10.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 17.92z"/></svg>
+                            +91 80000 00000
+                        </a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+
+        <hr class="gm-footer-divider" />
+    </div>
+
+    <div class="gm-footer-bottom">
+        <div class="container d-flex flex-wrap align-items-center justify-content-between gap-2">
+            <span>&copy; @DateTime.UtcNow.Year GOLIS Mart. All rights reserved.</span>
+            <span style="color:#4b5563;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:4px;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                Demo data — prices for illustration only. Not for production use.
+            </span>
+        </div>
+    </div>
+</footer>

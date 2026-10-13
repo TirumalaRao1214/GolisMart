@@ -1,0 +1,31 @@
+@* _CategoryCard.cshtml — Reusable category card partial
+   Model: GOLISMart.Web.Services.CategoryDto *@
+@model GOLISMart.Web.Services.CategoryDto
+<a asp-controller="Catalog" asp-action="Category" asp-route-slug="@Model.Slug"
+   class="gm-cat-card" title="Shop @Model.Name">
+    @if (!string.IsNullOrEmpty(Model.ImagePath))
+    {
+        <div class="gm-cat-img-wrap">
+            <img src="@Model.ImagePath" alt="@Model.Name"
+                 loading="lazy"
+                 width="400" height="300"
+                 onerror="this.onerror=null;this.closest('.gm-cat-img-wrap').innerHTML='<div class=\'gm-cat-placeholder\'><svg viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'currentColor\' stroke-width=\'1.5\'><path d=\'M20 7H4a2 2 0 00-2 2v10a2 2 0 002 2h16a2 2 0 002-2V9a2 2 0 00-2-2z\'/><path d=\'M16 3H8\'/></svg></div>'" />
+        </div>
+    }
+    else
+    {
+        <div class="gm-cat-placeholder">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+                <path d="M20 7H4a2 2 0 00-2 2v10a2 2 0 002 2h16a2 2 0 002-2V9a2 2 0 00-2-2z"/>
+                <path d="M16 3H8"/>
+            </svg>
+        </div>
+    }
+    <div class="gm-cat-card-body">
+        <div class="gm-cat-card-name">@Model.Name</div>
+        @if (Model.ProductCount > 0)
+        {
+            <div class="gm-cat-card-count">@Model.ProductCount item@(Model.ProductCount == 1 ? "" : "s")</div>
+        }
+    </div>
+</a>

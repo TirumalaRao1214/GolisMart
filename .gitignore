@@ -1,0 +1,47 @@
+## Build outputs
+bin/
+obj/
+
+## NuGet packages
+*.nupkg
+*.snupkg
+.nuget/
+packages/
+
+## Visual Studio / Rider
+.vs/
+.idea/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+*.userprefs
+
+## Logs
+logs/
+*.log
+
+## OS
+.DS_Store
+Thumbs.db
+
+## Sensitive / environment-specific settings — NEVER commit these
+appsettings.Development.json
+appsettings.*.json
+!appsettings.json
+
+## Secrets
+secrets.json
+
+## Publish output
+publish/
+**/publish/
+
+## dotnet tools
+.config/dotnet-tools.json.lock
+
+## Test results
+TestResults/
+coverage/
+*.coverage
+*.coveragexml

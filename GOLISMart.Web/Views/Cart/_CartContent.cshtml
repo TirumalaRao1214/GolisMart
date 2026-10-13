@@ -1,0 +1,206 @@
+@model GOLISMart.Web.Models.CartViewModel
+@{
+    var cart = Model.Cart;
+    var hasItems = cart?.Items?.Count > 0;
+}
+
+<div id="gm-cart-content-container">
+    @if (!Model.ApiAvailable)
+    {
+        <div class="gm-cart-empty">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+            </svg>
+            <p class="mt-3 mb-1 fw-semibold">Service temporarily unavailable</p>
+            <p style="color:var(--gm-text-muted);font-size:.9rem;">We could not load your cart right now. Please try again later.</p>
+            <a asp-controller="Home" asp-action="Index" class="gm-btn-primary mt-3 gm-spa-link">Continue Shopping</a>
+        </div>
+    }
+    else if (!hasItems)
+    {
+        <div class="gm-cart-empty">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2">
+                <circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/>
+                <path d="M1 1h4l2.68 13.39a2 2 0 001.97 1.61h9.72a2 2 0 001.97-1.61L23 6H6"/>
+            </svg>
+            <p class="mt-3 mb-1 fw-semibold">Your cart is empty</p>
+            <p style="color:var(--gm-text-muted);font-size:.9rem;">Looks like you haven't added anything yet.</p>
+            <a asp-controller="Catalog" asp-action="Index" class="gm-btn-primary mt-3 gm-spa-link">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+                Shop Now
+            </a>
+        </div>
+    }
+    else
+    {
+        <div class="gm-cart-layout">
+            @* ── Items list ─────────────────────────────────────────── *@
+            <div class="gm-cart-items-panel">
+                @foreach (var item in cart!.Items)
+                {
+                    <div class="gm-cart-item @(!item.IsAvailable ? "gm-cart-item--unavailable" : "")" id="cart-item-@item.ProductId" data-product-id="@item.ProductId">
+                        @* Product image *@
+                        <a asp-controller="Product" asp-action="Detail" asp-route-slug="@item.Slug" class="gm-cart-item-img-link gm-spa-link">
+                            @if (!string.IsNullOrEmpty(item.ImagePath))
+                            {
+                                <img src="@item.ImagePath" alt="@item.Name"
+                                     onerror="this.onerror=null;this.parentElement.innerHTML='<div class=\'gm-cart-item-img-placeholder\'></div>'" />
+                            }
+                            else
+                            {
+                                <div class="gm-cart-item-img-placeholder">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                                </div>
+                            }
+                        </a>
+
+                        @* Item details *@
+                        <div class="gm-cart-item-details">
+                            <a asp-controller="Product" asp-action="Detail" asp-route-slug="@item.Slug" class="gm-cart-item-name gm-spa-link">@item.Name</a>
+                            <div class="gm-cart-item-unit">@item.UnitLabel</div>
+
+                            @if (!item.IsAvailable)
+                            {
+                                <span class="gm-stock-chip gm-chip-outstock" style="font-size:.75rem;">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:10px;height:10px;"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+                                    @(!item.IsInStock ? "Out of stock" : "Unavailable")
+                                </span>
+                            }
+
+                            @* Pricing *@
+                            <div class="gm-cart-item-pricing">
+                                <span class="gm-cart-item-price">&#8377;@item.UnitPrice.ToString("N2")</span>
+                                @if (item.OriginalPrice > item.UnitPrice)
+                                {
+                                    <span class="gm-cart-item-original">&#8377;@item.OriginalPrice.ToString("N2")</span>
+                                }
+                            </div>
+                        </div>
+
+                        @* Quantity + line total *@
+                        <div class="gm-cart-item-actions">
+                            @if (item.IsAvailable)
+                            {
+                                <form method="post" asp-controller="Cart" asp-action="Update" class="gm-cart-qty-form" data-product-id="@item.ProductId">
+                                    @Html.AntiForgeryToken()
+                                    <input type="hidden" name="productId" value="@item.ProductId" />
+                                    <label class="visually-hidden" for="qty-@item.ProductId">Quantity</label>
+                                    <div class="gm-qty-row gm-qty-row--sm">
+                                        <button class="gm-qty-btn gm-cart-minus-btn" type="button"
+                                                data-product-id="@item.ProductId"
+                                                aria-label="Decrease quantity">−</button>
+                                        <input type="number" id="qty-@item.ProductId" name="quantity"
+                                               class="gm-cart-qty-input"
+                                               value="@item.Quantity.ToString("G29")"
+                                               min="1" max="20" step="1"
+                                               data-product-id="@item.ProductId"
+                                               aria-label="Quantity for @item.Name" />
+                                        <button class="gm-qty-btn gm-cart-plus-btn" type="button"
+                                                data-product-id="@item.ProductId"
+                                                aria-label="Increase quantity">+</button>
+                                    </div>
+                                    <button type="submit" class="gm-cart-update-btn d-none" aria-label="Update quantity">Update</button>
+                                </form>
+                            }
+                            else
+                            {
+                                <span style="font-size:.8rem;color:var(--gm-text-muted);">Qty: @item.Quantity.ToString("G29")</span>
+                            }
+
+                            <div class="gm-cart-item-linetotal" id="linetotal-@item.ProductId">&#8377;@item.LineTotal.ToString("N2")</div>
+
+                            @* Remove button *@
+                            <form method="post" asp-controller="Cart" asp-action="Remove" class="gm-cart-remove-form" data-product-id="@item.ProductId">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="productId" value="@item.ProductId" />
+                                <button type="submit" class="gm-cart-remove-btn" aria-label="Remove @item.Name from cart" data-product-id="@item.ProductId">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                }
+
+                @* Clear cart *@
+                <div class="gm-cart-actions-row">
+                    <a asp-controller="Catalog" asp-action="Index" class="gm-btn-outline gm-spa-link">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><polyline points="15 18 9 12 15 6"/></svg>
+                        Continue Shopping
+                    </a>
+                    <form method="post" asp-controller="Cart" asp-action="Clear" id="gm-clear-cart-form" style="display:inline;">
+                        @Html.AntiForgeryToken()
+                        <button type="submit" class="gm-btn-outline-danger">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg>
+                            Clear Cart
+                        </button>
+                    </form>
+                </div>
+            </div>
+
+            @* ── Order summary ──────────────────────────────────────── *@
+            <aside class="gm-cart-summary" id="gm-cart-summary-sidebar">
+                <h2 class="gm-cart-summary-title">Order Summary</h2>
+
+                <div class="gm-cart-summary-row">
+                    <span id="gm-summary-subtotal-label">Subtotal (@cart.TotalItems item@(cart.TotalItems != 1 ? "s" : ""))</span>
+                    <span id="gm-summary-subtotal">&#8377;@cart.SubTotal.ToString("N2")</span>
+                </div>
+
+                <div class="gm-cart-summary-row">
+                    <span>Delivery</span>
+                    <span id="gm-summary-delivery">
+                        @if (Model.IsFreeDelivery)
+                        {
+                            <span style="color:var(--gm-primary);font-weight:600;">Free</span>
+                        }
+                        else
+                        {
+                            <span>&#8377;@Model.DeliveryFee.ToString("N2")</span>
+                        }
+                    </span>
+                </div>
+
+                <div id="gm-free-delivery-note-container">
+                    @if (!Model.IsFreeDelivery)
+                    {
+                        <div class="gm-cart-summary-free-note" id="gm-free-delivery-note">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px;"><polyline points="20 6 9 17 4 12"/></svg>
+                            Add &#8377;@((Model.FreeDeliveryAbove - cart.SubTotal).ToString("N2")) more for free delivery
+                        </div>
+                    }
+                </div>
+
+                <div class="gm-cart-summary-divider"></div>
+
+                <div class="gm-cart-summary-row gm-cart-summary-total">
+                    <span>Total</span>
+                    <span id="gm-summary-total">&#8377;@Model.FinalTotal.ToString("N2")</span>
+                </div>
+
+                @* Proceed to Checkout *@
+                <div id="gm-checkout-btn-container">
+                    @if (cart.Items.Any(i => i.IsAvailable))
+                    {
+                        <a asp-controller="Checkout" asp-action="Index"
+                           class="gm-add-to-cart-btn w-100 mt-3 text-center text-decoration-none gm-spa-link"
+                           style="display:block;">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                                 style="width:16px;height:16px;vertical-align:middle;margin-right:4px;">
+                                <path d="M5 12h14"/><path d="M12 5l7 7-7 7"/>
+                            </svg>
+                            Proceed to Checkout
+                        </a>
+                    }
+                    else
+                    {
+                        <button class="gm-add-to-cart-btn w-100 mt-3" disabled
+                                title="No available items in cart"
+                                style="cursor:not-allowed;opacity:.6;">
+                            Proceed to Checkout
+                        </button>
+                    }
+                </div>
+            </aside>
+        </div>
+    }
+</div>
