@@ -397,6 +397,77 @@ public class OrderRepository : IOrderRepository
         }
     }
 
+    // ── VoidOrderAsync ────────────────────────────────────────────────────────
+    // Called when the payment gateway call fails immediately after order creation.
+    // Restores inventory and marks the order Cancelled so it does not accumulate
+    // as a dangling Pending row with deducted stock.
+    public async Task VoidOrderAsync(int orderId, CancellationToken ct = default)
+    {
+        using var conn = _db.CreateConnection();
+        conn.Open();
+        using var tx = conn.BeginTransaction(IsolationLevel.ReadCommitted);
+
+        try
+        {
+            // Only void if still Pending and has no payment record
+            const string checkSql = """
+                SELECT Id, Status FROM Orders
+                WHERE  Id = @OrderId AND Status = 'Pending';
+                """;
+
+            var exists = await conn.QuerySingleOrDefaultAsync<int?>(
+                new CommandDefinition(checkSql, new { OrderId = orderId },
+                    transaction: tx, commandTimeout: Timeout, cancellationToken: ct));
+
+            if (exists is null)
+            {
+                tx.Rollback();
+                return; // already progressed past Pending — leave it alone
+            }
+
+            // Restore inventory
+            const string restoreInv = """
+                UPDATE Inventory
+                SET    QuantityOnHand = QuantityOnHand + oi.Quantity,
+                       UpdatedAt      = SYSUTCDATETIME()
+                FROM   Inventory i
+                JOIN   OrderItems oi ON oi.ProductId = i.ProductId
+                WHERE  oi.OrderId = @OrderId;
+                """;
+
+            await conn.ExecuteAsync(new CommandDefinition(restoreInv, new { OrderId = orderId },
+                transaction: tx, commandTimeout: Timeout, cancellationToken: ct));
+
+            // Cancel the order
+            const string cancelSql = """
+                UPDATE Orders
+                SET    Status     = 'Cancelled',
+                       UpdatedAt  = SYSUTCDATETIME()
+                WHERE  Id = @OrderId;
+                """;
+
+            await conn.ExecuteAsync(new CommandDefinition(cancelSql, new { OrderId = orderId },
+                transaction: tx, commandTimeout: Timeout, cancellationToken: ct));
+
+            // Status history
+            const string historySql = """
+                INSERT INTO OrderStatusHistory (OrderId, Status, Notes, ChangedBy, ChangedAt)
+                VALUES (@OrderId, 'Cancelled', 'Voided — payment gateway unavailable', 'system', SYSUTCDATETIME());
+                """;
+
+            await conn.ExecuteAsync(new CommandDefinition(historySql, new { OrderId = orderId },
+                transaction: tx, commandTimeout: Timeout, cancellationToken: ct));
+
+            tx.Commit();
+            _logger.LogInformation("Order {OrderId} voided (gateway failure)", orderId);
+        }
+        catch
+        {
+            try { tx.Rollback(); } catch { /* swallow */ }
+            throw;
+        }
+    }
+
     // ── GetByIdempotencyKeyAsync ──────────────────────────────────────────────
     public async Task<Order?> GetByIdempotencyKeyAsync(
         string idempotencyKey, string userId, CancellationToken ct = default)

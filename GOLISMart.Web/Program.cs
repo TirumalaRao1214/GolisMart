@@ -42,6 +42,30 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
         options.Cookie.Name      = "GOLISMart_Auth";
         options.ExpireTimeSpan   = TimeSpan.FromHours(8);
         options.SlidingExpiration = false;
+        options.Events.OnRedirectToLogin = context =>
+        {
+            if (context.Request.Path.StartsWithSegments("/checkout/razorpay") ||
+                context.Request.Headers["X-Requested-With"] == "XMLHttpRequest" ||
+                context.Request.Headers.Accept.Any(a => a?.Contains("application/json") == true))
+            {
+                context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                return Task.CompletedTask;
+            }
+            context.Response.Redirect(context.RedirectUri);
+            return Task.CompletedTask;
+        };
+        options.Events.OnRedirectToAccessDenied = context =>
+        {
+            if (context.Request.Path.StartsWithSegments("/checkout/razorpay") ||
+                context.Request.Headers["X-Requested-With"] == "XMLHttpRequest" ||
+                context.Request.Headers.Accept.Any(a => a?.Contains("application/json") == true))
+            {
+                context.Response.StatusCode = StatusCodes.Status403Forbidden;
+                return Task.CompletedTask;
+            }
+            context.Response.Redirect(context.RedirectUri);
+            return Task.CompletedTask;
+        };
     });
 
 builder.Services.AddAuthorization(options =>
@@ -59,6 +83,9 @@ var configureApiClient = (HttpClient client) =>
         ?? throw new InvalidOperationException("ApiSettings:BaseUrl is not configured.");
     client.BaseAddress = new Uri(baseUrl.TrimEnd('/') + "/");
     client.Timeout = TimeSpan.FromSeconds(30);
+    // Suppress the ngrok browser-warning interstitial when BaseUrl points to a tunnel.
+    // Has no effect on direct localhost or production calls.
+    client.DefaultRequestHeaders.TryAddWithoutValidation("ngrok-skip-browser-warning", "1");
 };
 
 builder.Services.AddHttpClient<ICatalogApiClient, CatalogApiClient>(configureApiClient);
@@ -70,6 +97,7 @@ builder.Services.AddHttpClient<ILocationApiClient, LocationApiClient>(configureA
 builder.Services.AddHttpClient<IOrderApiClient, OrderApiClient>(configureApiClient);
 builder.Services.AddHttpClient<IAdminApiClient, AdminApiClient>(configureApiClient);
 builder.Services.AddHttpClient<IDeliveryManagementApiClient, DeliveryManagementApiClient>(configureApiClient);
+builder.Services.AddHttpClient<IPaymentsApiClient, PaymentsApiClient>(configureApiClient);
 
 var app = builder.Build();
 
@@ -77,9 +105,8 @@ if (!app.Environment.IsDevelopment())
 {
     app.UseExceptionHandler("/Home/Error");
     app.UseHsts();
+    app.UseHttpsRedirection();
 }
-
-app.UseHttpsRedirection();
 app.UseRouting();
 app.UseSession();
 app.UseAuthentication();

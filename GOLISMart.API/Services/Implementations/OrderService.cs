@@ -27,7 +27,7 @@ public class OrderService : IOrderService
     private readonly ILogger<OrderService> _logger;
 
     private static readonly HashSet<string> AllowedPaymentMethods =
-        new(StringComparer.OrdinalIgnoreCase) { "COD", "UPI", "Card", "NetBanking", "Wallet" };
+        new(StringComparer.OrdinalIgnoreCase) { "COD", "UPI", "Card", "NetBanking", "Wallet", "Online" };
 
     private decimal DefaultDeliveryFee =>
         _config.GetValue<decimal>("CartSettings:DeliveryFee", 40m);

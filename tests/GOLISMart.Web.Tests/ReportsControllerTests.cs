@@ -18,8 +18,15 @@ public class ReportsControllerTests
 {
     private readonly Mock<IAdminApiClient> _api = new();
 
-    private AdminReportsController CreateController() =>
-        new(_api.Object, NullLogger<AdminReportsController>.Instance);
+    private AdminReportsController CreateController()
+    {
+        var httpContext = new Microsoft.AspNetCore.Http.DefaultHttpContext();
+        httpContext.Request.Headers["Cookie"] = "GOLISMart_AuthToken=test-jwt-token";
+        return new AdminReportsController(_api.Object, NullLogger<AdminReportsController>.Instance)
+        {
+            ControllerContext = new ControllerContext { HttpContext = httpContext }
+        };
+    }
 
     [Fact]
     public async Task Index_ReturnsViewWithModel_WhenApiSucceeds()

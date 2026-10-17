@@ -3,7 +3,6 @@ using GOLISMart.Web.Services;
 using GOLISMart.Web.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-
 namespace GOLISMart.Web.Controllers;
 
 [Authorize]
@@ -13,6 +12,8 @@ public class CheckoutController : Controller
     private readonly IAuthApiClient _authApi;
     private readonly ICartApiClient _cartApi;
     private readonly IOrderApiClient _orderApi;
+    private readonly IPaymentsApiClient _paymentsApi;
+    private readonly IConfiguration _config;
     private readonly ILogger<CheckoutController> _logger;
 
     private const string SessionKeyName   = "GOLISMart_CartSession";
@@ -23,12 +24,16 @@ public class CheckoutController : Controller
         IAuthApiClient authApi,
         ICartApiClient cartApi,
         IOrderApiClient orderApi,
+        IPaymentsApiClient paymentsApi,
+        IConfiguration config,
         ILogger<CheckoutController> logger)
     {
         _checkoutApi = checkoutApi;
         _authApi     = authApi;
         _cartApi     = cartApi;
         _orderApi    = orderApi;
+        _paymentsApi = paymentsApi;
+        _config      = config;
         _logger      = logger;
     }
 
@@ -169,6 +174,7 @@ public class CheckoutController : Controller
                 });
             }
 
+            ViewBag.ApiBaseUrl = _config["ApiSettings:BaseUrl"]?.TrimEnd('/') ?? string.Empty;
             return View("Review", new CheckoutReviewViewModel
             {
                 Summary      = result.Summary,
@@ -178,6 +184,7 @@ public class CheckoutController : Controller
         catch (Exception ex)
         {
             _logger.LogError(ex, "Checkout review GET threw an unexpected exception for address {AddressId}", addressId);
+            ViewBag.ApiBaseUrl = _config["ApiSettings:BaseUrl"]?.TrimEnd('/') ?? string.Empty;
             return View("Review", new CheckoutReviewViewModel
             {
                 ApiAvailable = false,
@@ -270,6 +277,7 @@ public class CheckoutController : Controller
                 });
             }
 
+            ViewBag.ApiBaseUrl = _config["ApiSettings:BaseUrl"]?.TrimEnd('/') ?? string.Empty;
             return View("Review", new CheckoutReviewViewModel
             {
                 Summary      = result.Summary,
@@ -283,6 +291,7 @@ public class CheckoutController : Controller
             if (IsAjaxRequest())
                 return StatusCode(500, new { success = false, message = "An unexpected error occurred. Please try again." });
 
+            ViewBag.ApiBaseUrl = _config["ApiSettings:BaseUrl"]?.TrimEnd('/') ?? string.Empty;
             return View("Review", new CheckoutReviewViewModel
             {
                 ApiAvailable = false,
@@ -351,4 +360,183 @@ public class CheckoutController : Controller
             return RedirectToAction(nameof(Index));
         }
     }
+
+    // ── Razorpay proxy: create gateway order ──────────────────────────────────
+    // The browser calls this MVC endpoint, which reads the session key from
+    // server-side Session and the JWT from the HttpOnly cookie, then forwards
+    // both to the Web API.  Neither secret ever touches the browser.
+
+    [HttpPost("checkout/razorpay/create-order")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> RazorpayCreateOrder(
+        [FromBody] RazorpayCreateOrderBody body,
+        CancellationToken ct = default)
+    {
+        var token      = GetToken();
+        var sessionKey = GetSessionKey();
+
+        if (token is null)
+        {
+            _logger.LogWarning("RazorpayCreateOrder: unauthenticated request");
+            return Unauthorized(new { success = false, message = "Your session has expired. Please log in again.", redirectUrl = "/account/login?returnUrl=/checkout" });
+        }
+
+        if (string.IsNullOrEmpty(sessionKey))
+        {
+            _logger.LogWarning("RazorpayCreateOrder: no cart session key in server-side Session");
+            return BadRequest(new { success = false, message = "Your cart session has expired. Please add items to your cart again.", redirectUrl = "/cart" });
+        }
+
+        var addressId = HttpContext.Session.GetInt32("Checkout_SelectedAddressId") ?? 0;
+        if (addressId <= 0)
+        {
+            _logger.LogWarning("RazorpayCreateOrder: no address in session, user must re-select");
+            return BadRequest(new { success = false, message = "No delivery address selected. Please go back and select an address.", redirectUrl = "/checkout" });
+        }
+
+        // Use idempotency key from body if provided, or generate one per checkout session
+        var idempotencyKey = body?.IdempotencyKey;
+        if (string.IsNullOrWhiteSpace(idempotencyKey))
+        {
+            idempotencyKey = HttpContext.Session.GetString("Checkout_RzpIdempotencyKey");
+            if (string.IsNullOrEmpty(idempotencyKey))
+            {
+                idempotencyKey = Guid.NewGuid().ToString("N");
+                HttpContext.Session.SetString("Checkout_RzpIdempotencyKey", idempotencyKey);
+            }
+        }
+
+        _logger.LogDebug(
+            "RazorpayCreateOrder: forwarding to API for address {AddressId}, idempotencyKey {Key}",
+            addressId, idempotencyKey);
+
+        try
+        {
+            var request = new CreateRazorpayOrderRequest(
+                SessionKey:     sessionKey,
+                AddressId:      addressId,
+                Notes:          null,
+                IdempotencyKey: idempotencyKey);
+
+            var result = await _paymentsApi.CreateRazorpayOrderAsync(token, request, ct);
+            return Ok(result);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return Unauthorized(new { success = false, message = "Your session has expired. Please log in again.", redirectUrl = "/account/login?returnUrl=/checkout" });
+        }
+        catch (InvalidOperationException ex)
+        {
+            // Business rule violation (empty cart, address not found, out of stock, etc.)
+            _logger.LogInformation(ex, "[{TraceId}] RazorpayCreateOrder: business rule error", HttpContext.TraceIdentifier);
+            return UnprocessableEntity(new { success = false, message = ex.Message });
+        }
+        catch (HttpRequestException ex)
+        {
+            // Gateway unavailable or API 500/503 — surface as 503 to the browser
+            _logger.LogError(ex, "[{TraceId}] RazorpayCreateOrder: payment service error", HttpContext.TraceIdentifier);
+            return StatusCode(StatusCodes.Status503ServiceUnavailable,
+                new { success = false, message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[{TraceId}] RazorpayCreateOrder: unexpected error", HttpContext.TraceIdentifier);
+            return StatusCode(500, new { success = false, message = "An unexpected error occurred. Please try again." });
+        }
+    }
+
+    // ── Razorpay proxy: verify payment signature ──────────────────────────────
+
+    [HttpPost("checkout/razorpay/verify")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> RazorpayVerify(
+        [FromBody] RazorpayVerifyBody body,
+        CancellationToken ct = default)
+    {
+        var token = GetToken();
+
+        if (token is null)
+        {
+            _logger.LogWarning("RazorpayVerify: unauthenticated request");
+            return Unauthorized(new { success = false, message = "Your session has expired. Please log in again." });
+        }
+
+        if (body is null ||
+            string.IsNullOrWhiteSpace(body.RazorpayOrderId)  ||
+            string.IsNullOrWhiteSpace(body.RazorpayPaymentId)||
+            string.IsNullOrWhiteSpace(body.RazorpaySignature))
+        {
+            return BadRequest(new { success = false, message = "Invalid payment details." });
+        }
+
+        _logger.LogDebug(
+            "RazorpayVerify: verifying payment {PaymentId} for gateway order {OrderId}",
+            body.RazorpayPaymentId, body.RazorpayOrderId);
+
+        try
+        {
+            var request = new VerifyRazorpayPaymentRequest(
+                RazorpayOrderId:   body.RazorpayOrderId,
+                RazorpayPaymentId: body.RazorpayPaymentId,
+                RazorpaySignature: body.RazorpaySignature);
+
+            var result = await _paymentsApi.VerifyRazorpayPaymentAsync(token, request, ct);
+
+            if (result is null)
+            {
+                _logger.LogError("RazorpayVerify: API returned null");
+                return StatusCode(503, new { success = false, message = "Payment verification service is temporarily unavailable." });
+            }
+
+            if (result.Success)
+            {
+                var sessionKey = GetSessionKey();
+                if (!string.IsNullOrEmpty(sessionKey))
+                {
+                    try
+                    {
+                        await _cartApi.ClearCartAsync(sessionKey, ct);
+                    }
+                    catch (Exception cartEx)
+                    {
+                        _logger.LogWarning(cartEx, "Failed to clear cart after successful payment verification");
+                    }
+                }
+
+                // Clear idempotency key and selected address so subsequent checkout starts clean
+                HttpContext.Session.Remove("Checkout_RzpIdempotencyKey");
+                HttpContext.Session.Remove("Checkout_SelectedAddressId");
+                _logger.LogInformation(
+                    "RazorpayVerify: payment verified for order {OrderNumber}", result.OrderNumber);
+            }
+            else
+            {
+                _logger.LogWarning(
+                    "RazorpayVerify: verification failed — {Message}", result.Message);
+            }
+
+            return Ok(result);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return Unauthorized(new { success = false, message = "Your session has expired. Please log in again." });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "RazorpayVerify: unexpected error");
+            return StatusCode(500, new { success = false, message = "An unexpected error occurred during payment verification." });
+        }
+    }
 }
+
+// ── Request body models for the Razorpay MVC proxies ─────────────────────────
+// Kept in this file to avoid scattering small records across the project.
+
+/// <summary>Body sent by the browser to the create-order proxy.</summary>
+public record RazorpayCreateOrderBody(string? IdempotencyKey);
+
+/// <summary>Body sent by the browser to the verify proxy.</summary>
+public record RazorpayVerifyBody(
+    string RazorpayOrderId,
+    string RazorpayPaymentId,
+    string RazorpaySignature);

@@ -43,8 +43,11 @@ public class ProductRepository : IProductRepository
 
         if (!string.IsNullOrWhiteSpace(query.Search))
         {
-            conditions.Add("(p.Name LIKE @Search OR p.Description LIKE @Search OR p.SKU LIKE @Search)");
-            parameters.Add("Search", $"%{query.Search.Trim()}%");
+            // Partial, case-insensitive (column collation is *_CI_AS) match on name, description, SKU and category.
+            // LIKE wildcards typed by the user are escaped so they are matched literally.
+            conditions.Add("(p.Name LIKE @Search ESCAPE '\\' OR p.Description LIKE @Search ESCAPE '\\' " +
+                           "OR p.SKU LIKE @Search ESCAPE '\\' OR c.Name LIKE @Search ESCAPE '\\')");
+            parameters.Add("Search", $"%{EscapeLike(query.Search.Trim())}%", System.Data.DbType.String);
         }
 
         if (!string.IsNullOrWhiteSpace(query.Category))
@@ -68,10 +71,11 @@ public class ProductRepository : IProductRepository
             WHERE  {where};
             """;
 
+        // Only the columns needed to render product cards (no Description / timestamps)
         var dataSql = $"""
-            SELECT p.Id, p.CategoryId, p.SKU, p.Name, p.Slug, p.Description,
+            SELECT p.Id, p.CategoryId, p.SKU, p.Name, p.Slug,
                    p.UnitCode, p.UnitLabel, p.Price, p.OfferPrice, p.IsFeatured, p.IsActive,
-                   p.ImagePath, p.CreatedAt, p.UpdatedAt,
+                   p.ImagePath,
                    c.Name  AS CategoryName,
                    c.Slug  AS CategorySlug
             FROM   Products p
@@ -99,6 +103,9 @@ public class ProductRepository : IProductRepository
 
         return new PagedResult<Product>(items.AsList(), page, pageSize, totalCount, totalPages);
     }
+
+    private static string EscapeLike(string value) =>
+        value.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_").Replace("[", "\\[");
 
     public async Task<Product?> GetByIdAsync(int id, CancellationToken ct = default)
     {

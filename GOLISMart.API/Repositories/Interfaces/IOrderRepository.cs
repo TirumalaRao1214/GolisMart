@@ -39,4 +39,11 @@ public interface IOrderRepository
 
     /// <summary>Returns an existing order with the given idempotency key for the user (duplicate detection).</summary>
     Task<Order?> GetByIdempotencyKeyAsync(string idempotencyKey, string userId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Cancels a Pending order that was created but not associated with a gateway payment.
+    /// Restores inventory and records a status history row. Used when the payment gateway
+    /// call fails immediately after order creation so the order does not remain dangling.
+    /// </summary>
+    Task VoidOrderAsync(int orderId, CancellationToken ct = default);
 }

@@ -1,0 +1,585 @@
+================================================================================
+  GOLIS MART — RAZORPAY TEST MODE INTEGRATION SUMMARY
+  Generated: October 2026
+================================================================================
+
+
+────────────────────────────────────────────────────────────────────────────────
+1. TECHNOLOGY STACK
+────────────────────────────────────────────────────────────────────────────────
+
+  Backend API  : ASP.NET Core Web API  (GOLISMart.API, localhost:5000)
+  Frontend MVC : ASP.NET Core MVC      (GOLISMart.Web, localhost:5002)
+  Database     : SQL Server Express    (GOLISMartDb)
+  ORM          : Dapper
+  Auth         : JWT (API) + Cookie (Web)
+  Payment      : Razorpay Standard Checkout — TEST MODE ONLY
+  Logging      : Serilog (Console)
+  Tests        : xUnit + Moq + FluentAssertions
+
+
+────────────────────────────────────────────────────────────────────────────────
+2. ARCHITECTURE OVERVIEW
+────────────────────────────────────────────────────────────────────────────────
+
+  Browser (JS)
+    │
+    │  POST /checkout/razorpay/create-order  (antiforgery token)
+    │  POST /checkout/razorpay/verify        (antiforgery token)
+    ▼
+  GOLISMart.Web  (MVC proxy — reads JWT from HttpOnly cookie,
+    │              session key from server-side Session)
+    │
+    │  POST http://localhost:5000/api/v1/payments/razorpay/create-order  (Bearer JWT)
+    │  POST http://localhost:5000/api/v1/payments/razorpay/verify        (Bearer JWT)
+    ▼
+  GOLISMart.API
+    │
+    ├── PaymentsController
+    │     ├── RazorpayService.CreateOrderAsync()
+    │     ├── RazorpayService.VerifyPaymentAsync()
+    │     └── RazorpayService.ProcessWebhookAsync()
+    │
+    ├── RazorpayService  ──► https://api.razorpay.com/v1/orders   (Basic Auth)
+    │                    ──► https://api.razorpay.com/v1/payments (Basic Auth)
+    │
+    └── SQL Server
+          ├── Orders
+          ├── OrderItems
+          ├── Payments
+          └── PaymentWebhookEvents
+
+  NOTE: The browser never receives the JWT or KeySecret.
+        The ngrok URL is for INBOUND webhook only (Razorpay → API).
+        All Web→API calls use localhost:5000 directly.
+
+
+────────────────────────────────────────────────────────────────────────────────
+3. FILES CREATED (NEW)
+────────────────────────────────────────────────────────────────────────────────
+
+  GOLISMart.API/
+  ├── Controllers/
+  │     └── PaymentsController.cs
+  │           Endpoints:
+  │             POST /api/v1/payments/razorpay/create-order  [Authorize]
+  │             POST /api/v1/payments/razorpay/verify        [Authorize]
+  │             POST /api/v1/payments/razorpay/webhook       [AllowAnonymous]
+  │             GET  /api/v1/payments/razorpay/smoke-test    [Authorize, Dev only]
+  │
+  ├── DTOs/
+  │     └── RazorpayDto.cs
+  │           Records:
+  │             CreateRazorpayOrderRequest
+  │             CreateRazorpayOrderResponse
+  │             VerifyRazorpayPaymentRequest
+  │             VerifyRazorpayPaymentResponse
+  │             RazorpayOrderApiResponse
+  │             RazorpayPaymentApiResponse
+  │
+  ├── Exceptions/
+  │     └── PaymentGatewayException.cs
+  │           Custom exception for gateway errors (maps to HTTP 503).
+  │           Carries GatewayStatusCode and GatewayErrorCode.
+  │           Distinct from InvalidOperationException (business rules → 422).
+  │
+  ├── Models/
+  │     └── Payment.cs
+  │           Properties: Id, OrderId, GatewayName, GatewayOrderId,
+  │                       GatewayPaymentId, Amount, Currency, Status,
+  │                       Method, FailureReason, CreatedAt, UpdatedAt
+  │
+  │     └── PaymentWebhookEvent.cs
+  │           Properties: Id, PaymentId, GatewayName, EventType,
+  │                       GatewayEventId, RawPayload, ProcessedAt,
+  │                       ProcessingError, ReceivedAt
+  │
+  ├── Repositories/
+  │   ├── Interfaces/
+  │   │     └── IPaymentRepository.cs
+  │   │           Methods:
+  │   │             CreateAsync
+  │   │             GetByOrderIdAsync
+  │   │             GetByGatewayOrderIdAsync
+  │   │             GetByGatewayPaymentIdAsync
+  │   │             CaptureAsync
+  │   │             MarkFailedAsync
+  │   │             RecordWebhookEventAsync
+  │   │             MarkWebhookEventProcessedAsync
+  │   │             MarkWebhookEventErrorAsync
+  │   └── Implementations/
+  │         └── PaymentRepository.cs
+  │               All Dapper SQL implementations.
+  │               CaptureAsync: atomic — marks Payments.Status=Captured
+  │               AND Orders.PaymentStatus=Paid in one transaction.
+  │
+  └── Services/
+      ├── Interfaces/
+      │     └── IRazorpayService.cs
+      │           Methods:
+      │             CreateOrderAsync
+      │             VerifyPaymentAsync
+      │             ProcessWebhookAsync
+      └── Implementations/
+            └── RazorpayService.cs
+                  Full implementation (see section 5).
+
+  GOLISMart.Web/
+  ├── Services/
+  │   ├── Interfaces/
+  │   │     └── IPaymentsApiClient.cs
+  │   └── Implementations/
+  │         └── PaymentsApiClient.cs
+  │               HttpClient wrapper that calls GOLISMart.API.
+  │               Maps API status codes to typed exceptions:
+  │                 401/403 → UnauthorizedAccessException
+  │                 422/400 → InvalidOperationException  (business rule)
+  │                 500/503 → HttpRequestException       (gateway/service error)
+  │               Logs Razorpay correlation ID on every error.
+
+  database/
+  └── 012_RazorpayPayments.sql
+        Idempotent migration script.
+        Creates: Payments table, PaymentWebhookEvents table.
+        Adds:    Unique index on Payments(GatewayOrderId),
+                 Unique index on PaymentWebhookEvents(GatewayEventId).
+
+
+────────────────────────────────────────────────────────────────────────────────
+4. FILES MODIFIED (EXISTING)
+────────────────────────────────────────────────────────────────────────────────
+
+  GOLISMart.API/
+  ├── Program.cs
+  │     + Registered IPaymentRepository / PaymentRepository (Scoped)
+  │     + Registered IRazorpayService / RazorpayService with typed HttpClient
+  │       (BaseAddress = https://api.razorpay.com/, Timeout = 30s)
+  │
+  ├── appsettings.json
+  │     + Added Razorpay section:
+  │         KeyId:         rzp_test_ToFZ5mdbh7G3Fw
+  │         KeySecret:     (test mode secret — present in appsettings.json)
+  │         WebhookSecret: (test mode webhook secret)
+  │
+  └── Repositories/Interfaces/IOrderRepository.cs
+        + Added VoidOrderAsync(int orderId, CancellationToken)
+          Used to cancel dangling Pending orders when Razorpay call fails.
+
+  GOLISMart.API/Repositories/Implementations/OrderRepository.cs
+        + Implemented VoidOrderAsync:
+          Restores inventory, sets Status=Cancelled, writes history row.
+          Only acts on orders still in Pending state.
+
+  GOLISMart.Web/
+  ├── Program.cs
+  │     + Registered IPaymentsApiClient / PaymentsApiClient (typed HttpClient)
+  │     + Added ngrok-skip-browser-warning header to all API HttpClients
+  │       (suppresses ngrok interstitial page when BaseUrl is a tunnel)
+  │
+  ├── appsettings.Development.json
+  │     ApiSettings:BaseUrl = http://localhost:5000
+  │       (Web→API server-side calls use localhost directly, NOT ngrok.
+  │        ngrok is only for inbound Razorpay webhooks.)
+  │
+  ├── Controllers/CheckoutController.cs
+  │     + Added RazorpayCreateOrder()  POST /checkout/razorpay/create-order
+  │     + Added RazorpayVerify()       POST /checkout/razorpay/verify
+  │     Both are MVC proxy endpoints with [ValidateAntiForgeryToken].
+  │     Read JWT from HttpOnly cookie, SessionKey from server-side Session.
+  │     Neither is ever sent to the browser.
+  │     Exception mapping:
+  │       UnauthorizedAccessException → 401
+  │       InvalidOperationException   → 422 (business rule)
+  │       HttpRequestException        → 503 (gateway/service unavailable)
+  │       Exception                   → 500
+  │
+  └── Views/Checkout/Review.cshtml
+        + Payment method radio buttons (COD / Online)
+        + Single primaryBtn driven by updatePaymentUI()
+        + Full Razorpay Standard Checkout JS flow:
+            Step 1: POST /checkout/razorpay/create-order  →  get gateway order
+            Step 2: Open Razorpay checkout popup
+            Step 3: On success callback → POST /checkout/razorpay/verify
+            Step 4: Redirect to /order/confirmation/{id} on verified success
+        + Antiforgery token read from hidden field inside #confirmForm
+        + Idempotency key stored in sessionStorage (gm_rzp_idem)
+        + Duplicate-click guard: isSubmitting flag + primaryBtn.disabled
+        + updatePaymentUI() early-returns when button is disabled
+          (prevents onclick reassignment mid-flight)
+        + Handles: success, failed, cancelled, auth expiry, session expiry
+
+  GOLISMart.Web.csproj
+        + Added <ProduceReferenceAssembly>true</ProduceReferenceAssembly>
+          Allows test project to compile while Web process is running.
+
+  tests/GOLISMart.Web.Tests/SpaAndAjaxControllerTests.cs
+        + 10 new Razorpay proxy tests added
+
+
+────────────────────────────────────────────────────────────────────────────────
+5. RAZORPAY SERVICE LOGIC  (RazorpayService.CreateOrderAsync)
+────────────────────────────────────────────────────────────────────────────────
+
+  Step 0  Idempotency check
+            If IdempotencyKey already exists for this user, return existing
+            Razorpay order details without creating a new internal order.
+
+  Step 1  Load + validate cart
+            GetBySessionKeyAsync → must exist and have items.
+
+  Step 2  Verify address ownership
+            GetByIdAndUserIdAsync → address must belong to the logged-in user.
+
+  Step 3  Check delivery serviceability
+            DeliveryService.CheckServiceabilityAsync(pincode).
+
+  Step 4  Revalidate products + stock (server-side)
+            For each cart item:
+              - Product must be active
+              - Inventory must be in stock
+              - Quantity must be 1–20
+              - AvailableQuantity >= requested Quantity
+            Compute server-side line totals (OfferPrice ?? Price).
+            *** Browser-submitted prices are never trusted. ***
+
+  Step 5  Compute delivery fee
+            Free delivery if subTotal >= FreeDeliveryAbove threshold.
+            Check MinOrderValue constraint.
+
+  Step 6  Create internal GOLIS Mart order
+            OrderRepository.CreateOrderAsync — single transaction:
+              INSERT Orders
+              INSERT OrderItems
+              UPDATE Inventory (deduct stock, optimistic concurrency)
+              INSERT InventoryTransactions
+              INSERT OrderStatusHistory
+
+  Step 7  Convert total to paise
+            long amountPaise = (long)Math.Round(totalAmount * 100m, AwayFromZero)
+            Safe decimal arithmetic — no floating-point drift.
+
+  Step 8  Call Razorpay Orders API
+            POST https://api.razorpay.com/v1/orders
+            Body: { amount: <paise>, currency: "INR", receipt: "GM-{id}-{date}" }
+            Auth: Basic Auth (KeyId:KeySecret, Base64-encoded)
+            On failure → VoidOrderAsync (restore inventory, cancel order)
+                        → throw PaymentGatewayException → 503
+
+  Step 9  Persist payment attempt
+            PaymentRepository.CreateAsync
+            Status = "Initiated", GatewayOrderId = razorpay order_XXXX
+
+  Step 10 Return response to browser (via MVC proxy)
+            { internalOrderId, internalOrderNumber, razorpayOrderId,
+              amountPaise, currency, keyId (PUBLIC only),
+              customerName, customerEmail, customerPhone }
+            *** KeySecret is never included in any response. ***
+
+
+────────────────────────────────────────────────────────────────────────────────
+6. PAYMENT VERIFICATION LOGIC  (RazorpayService.VerifyPaymentAsync)
+────────────────────────────────────────────────────────────────────────────────
+
+  Step 1  Validate input — razorpay_order_id, payment_id, signature required.
+
+  Step 2  HMAC-SHA256 signature verification
+            expected = HMAC_SHA256(KeySecret, orderId + "|" + paymentId)
+            Compared with constant-time CryptographicEquals to prevent
+            timing attacks.
+
+  Step 3  Load payment record by GatewayOrderId.
+
+  Step 4  Idempotency — if already Captured, return success immediately.
+
+  Step 5  Load internal order (ownership check — userId must match).
+
+  Step 6  Verify with Razorpay Payments API
+            GET https://api.razorpay.com/v1/payments/{paymentId}
+            Validate:
+              - rzPayment.OrderId matches razorpayOrderId
+              - rzPayment.Amount matches expected paise (server-side)
+              - rzPayment.Currency == "INR"
+              - rzPayment.Captured == true OR rzPayment.Status == "captured"
+
+  Step 7  Mark Captured
+            PaymentRepository.CaptureAsync (atomic transaction):
+              UPDATE Payments SET Status='Captured'
+              UPDATE Orders   SET PaymentStatus='Paid'
+
+  Returns: { success, message, internalOrderId, orderNumber,
+             orderStatus, paymentStatus }
+
+
+────────────────────────────────────────────────────────────────────────────────
+7. WEBHOOK PROCESSING  (POST /api/v1/payments/razorpay/webhook)
+────────────────────────────────────────────────────────────────────────────────
+
+  1. Read raw request body BEFORE any framework body reader.
+  2. Validate X-Razorpay-Signature header using WebhookSecret (HMAC-SHA256).
+  3. Parse event type and event ID from JSON.
+  4. RecordWebhookEventAsync — idempotency: duplicate GatewayEventId → skip.
+  5. Handle event:
+       payment.captured → CaptureAsync (idempotent)
+       payment.failed   → MarkFailedAsync
+       others           → logged at Debug, acknowledged with 200
+  6. MarkWebhookEventProcessedAsync
+  7. On processing error → return 500 (Razorpay will retry)
+
+  Webhook URL:
+    https://bloomier-aspersively-patrica.ngrok-free.dev/api/v1/payments/razorpay/webhook
+
+  Register in Razorpay Dashboard:
+    Settings → Webhooks → Add New Webhook
+    Events: payment.captured, payment.failed
+    Secret: (value from Razorpay:WebhookSecret in appsettings.json)
+
+
+────────────────────────────────────────────────────────────────────────────────
+8. CONFIGURATION KEYS
+────────────────────────────────────────────────────────────────────────────────
+
+  File: GOLISMart.API/appsettings.json
+
+    "Razorpay": {
+      "KeyId":         "rzp_test_ToFZ5mdbh7G3Fw"    ← PUBLIC, safe to log
+      "KeySecret":     "<test mode secret>"          ← NEVER log, NEVER expose
+      "WebhookSecret": "<webhook secret>"            ← NEVER log, NEVER expose
+    }
+
+  File: GOLISMart.Web/appsettings.Development.json
+
+    "ApiSettings": {
+      "BaseUrl": "http://localhost:5000"             ← Web→API calls (direct)
+    }
+
+  IMPORTANT:
+  - KeySecret is only read server-side in RazorpayService.
+  - It is never serialized into any response DTO.
+  - It is never logged (only GatewayErrorCode and GatewayStatusCode are logged).
+  - ngrok URL is for Razorpay→API webhook only.
+  - Web→API calls always use localhost:5000 directly.
+
+
+────────────────────────────────────────────────────────────────────────────────
+9. SQL SCHEMA  (database/012_RazorpayPayments.sql)
+────────────────────────────────────────────────────────────────────────────────
+
+  Table: Payments
+    Id               INT IDENTITY PK
+    OrderId          INT NOT NULL  FK → Orders(Id)
+    GatewayName      NVARCHAR(50)  e.g. "Razorpay"
+    GatewayOrderId   NVARCHAR(200) Razorpay order_XXXX
+    GatewayPaymentId NVARCHAR(200) Razorpay pay_XXXX (set on capture)
+    Amount           DECIMAL(10,2)
+    Currency         NVARCHAR(5)   "INR"
+    Status           NVARCHAR(30)  Initiated | Captured | Failed
+    Method           NVARCHAR(50)  upi | card | netbanking | wallet
+    FailureReason    NVARCHAR(500)
+    CreatedAt        DATETIME2
+    UpdatedAt        DATETIME2
+    UNIQUE INDEX on GatewayOrderId
+
+  Table: PaymentWebhookEvents
+    Id               INT IDENTITY PK
+    PaymentId        INT NULL FK → Payments(Id)
+    GatewayName      NVARCHAR(50)
+    EventType        NVARCHAR(100) payment.captured | payment.failed
+    GatewayEventId   NVARCHAR(200) Razorpay event ID (idempotency key)
+    RawPayload       NVARCHAR(MAX)
+    ProcessedAt      DATETIME2 NULL
+    ProcessingError  NVARCHAR(1000) NULL
+    ReceivedAt       DATETIME2
+    UNIQUE INDEX on GatewayEventId
+
+
+────────────────────────────────────────────────────────────────────────────────
+10. HTTP STATUS CODE MAP
+────────────────────────────────────────────────────────────────────────────────
+
+  Scenario                                     API returns   MVC proxy returns
+  ─────────────────────────────────────────── ─────────────  ──────────────────
+  Cart empty / address not found / out of stock    422            422
+  Razorpay API unreachable (network error)         503            503
+  Razorpay API returns 4xx/5xx                     503            503
+  KeyId not configured                             503            503
+  Unauthenticated (missing/expired JWT)            401            401
+  Invalid input (missing required fields)          400            400
+  Signature mismatch                               200 {false}    200 {false}
+  Payment verified + captured                      200 {true}     200 {true}
+  Duplicate verification (already captured)        200 {true}     200 {true}
+
+
+────────────────────────────────────────────────────────────────────────────────
+11. SECURITY CONTROLS
+────────────────────────────────────────────────────────────────────────────────
+
+  1. KeySecret never leaves the API server process.
+  2. JWT never leaves the Web server process (HttpOnly cookie only).
+  3. Session key (cart) never leaves the Web server process.
+  4. All MVC proxy endpoints require [ValidateAntiForgeryToken].
+  5. Payment amounts are calculated server-side — browser values ignored.
+  6. Webhook signature validated with HMAC-SHA256 before any processing.
+  7. Duplicate webhook events rejected via GatewayEventId unique constraint.
+  8. Payment ownership verified: userId must own the order.
+  9. Razorpay payment status must be "captured" before marking Paid.
+  10. Constant-time signature comparison (CryptographicEquals) prevents
+      timing attacks.
+  11. Smoke-test endpoint disabled in non-Development environments.
+
+
+────────────────────────────────────────────────────────────────────────────────
+12. BUGS FIXED DURING INTEGRATION
+────────────────────────────────────────────────────────────────────────────────
+
+  Bug 1: HTTP 503 caused by ngrok interstitial (highest priority)
+    Root cause: ApiSettings:BaseUrl in appsettings.Development.json was set to
+                the ngrok tunnel URL. Web→API calls went through ngrok, which
+                returned an HTML interstitial page (not JSON). JsonSerializer
+                threw JsonException, caught as generic Exception → HttpRequestException
+                → CheckoutController returned 503.
+    Fix:       Restored BaseUrl to http://localhost:5000.
+               Added ngrok-skip-browser-warning header to all HttpClients
+               as a safety net for future tunnel testing.
+
+  Bug 2: Gateway errors (PaymentGatewayException) mapped to HTTP 422 not 503
+    Root cause: RazorpayService threw InvalidOperationException for ALL errors
+                including network failures. PaymentsController mapped
+                InvalidOperationException → 422 Unprocessable Entity.
+    Fix:       Introduced PaymentGatewayException. Only thrown for gateway
+               failures. PaymentsController catches it → 503.
+               InvalidOperationException reserved for business rule violations → 422.
+
+  Bug 3: Dangling Pending orders on every Razorpay failure
+    Root cause: CreateOrderAsync inserted the internal Order (step 6) before
+                calling Razorpay (step 8). On gateway failure the order was
+                left Pending with deducted inventory and no payment row.
+                Every retry created a new orphaned order.
+    Fix:       Wrapped CallRazorpayCreateOrderAsync in try/catch.
+               On failure, VoidOrderAsync restores inventory and cancels
+               the order before re-throwing.
+
+  Bug 4: Duplicate-click could bypass isSubmitting guard
+    Root cause: updatePaymentUI() reassigned primaryBtn.onclick on every call,
+                including error recovery paths while a request was in flight.
+                A rapid radio-button change then click could slip through.
+    Fix:       updatePaymentUI() early-returns when primaryBtn.disabled===true.
+
+  Bug 5: ErrorResponse never populated TraceId
+    Root cause: All ErrorResponse(message) calls omitted the TraceId parameter.
+    Fix:       All catch blocks now pass HttpContext.TraceIdentifier as TraceId.
+               Development 503 responses also include GatewayStatusCode and
+               GatewayErrorCode for diagnosing Razorpay failures without
+               needing console access.
+
+  Bug 6: No actionable detail in Razorpay error logs
+    Root cause: Gateway errors logged only the raw body as one blob.
+    Fix:       ExtractRazorpayError() pulls error.code and error.description
+               from Razorpay's JSON envelope and logs them as separate fields.
+               Network errors log the inner exception type.
+
+
+────────────────────────────────────────────────────────────────────────────────
+13. TEST RESULTS
+────────────────────────────────────────────────────────────────────────────────
+
+  Suite                       Total   Passed   Failed   Notes
+  ──────────────────────────  ─────   ──────   ──────   ──────────────────────
+  GOLISMart.API.Tests           154      154        0   All passing
+  GOLISMart.Web.Tests            43       41        2   2 pre-existing failures
+                                                        in AdminReportsController
+                                                        (unrelated to Razorpay)
+
+  Razorpay-specific tests (in SpaAndAjaxControllerTests.cs):
+    RazorpayCreateOrder_NoToken_Returns401                    PASS
+    RazorpayCreateOrder_NoSessionKey_Returns400               PASS
+    RazorpayCreateOrder_NoAddressInSession_Returns400         PASS
+    RazorpayCreateOrder_ApiReturnsOrder_Returns200            PASS
+    RazorpayCreateOrder_GatewayUnavailable_Returns503         PASS
+    RazorpayCreateOrder_BusinessRuleViolation_Returns422      PASS
+    RazorpayVerify_NoToken_Returns401                         PASS
+    RazorpayVerify_MissingFields_Returns400                   PASS
+    RazorpayVerify_ValidSignature_Returns200WithSuccess       PASS
+    RazorpayVerify_InvalidSignature_Returns200WithFailure     PASS
+
+
+────────────────────────────────────────────────────────────────────────────────
+14. HOW TO RUN LOCALLY
+────────────────────────────────────────────────────────────────────────────────
+
+  Terminal 1 — API
+    cd GOLISMart.API
+    dotnet run --launch-profile http
+    # Listening on http://localhost:5000
+
+  Terminal 2 — Web
+    cd GOLISMart.Web
+    dotnet run --launch-profile http
+    # Listening on http://localhost:5002
+
+  Terminal 3 — ngrok (for webhook testing only)
+    ngrok http http://localhost:5000
+    # Copy the https://xxxx.ngrok-free.app URL
+    # Register: https://xxxx.ngrok-free.app/api/v1/payments/razorpay/webhook
+    # in Razorpay Dashboard → Settings → Webhooks
+
+  Apply pending SQL migration (if not already run):
+    sqlcmd -S ".\SQLEXPRESS" -d GOLISMartDb -C -i database/012_RazorpayPayments.sql
+
+  Run tests:
+    dotnet test tests/GOLISMart.API.Tests --configuration Debug
+    dotnet test tests/GOLISMart.Web.Tests --configuration Debug --output tests/GOLISMart.Web.Tests/bin/TestRun
+
+
+────────────────────────────────────────────────────────────────────────────────
+15. RAZORPAY TEST CREDENTIALS (TEST MODE ONLY)
+────────────────────────────────────────────────────────────────────────────────
+
+  Key ID:    rzp_test_ToFZ5mdbh7G3Fw   (public — safe to share)
+  Dashboard: https://dashboard.razorpay.com  (use test mode toggle)
+
+  Test card:   4111 1111 1111 1111  Expiry: any future  CVV: any 3 digits
+  Test UPI:    success@razorpay
+  Test UPI:    failure@razorpay   (triggers payment.failed)
+
+  NEVER use live credentials in Development.
+  NEVER commit live credentials to Git.
+  Use User Secrets for production credentials:
+    cd GOLISMart.API
+    dotnet user-secrets set "Razorpay:KeyId"         "rzp_live_XXXX"
+    dotnet user-secrets set "Razorpay:KeySecret"     "XXXX"
+    dotnet user-secrets set "Razorpay:WebhookSecret" "XXXX"
+
+
+────────────────────────────────────────────────────────────────────────────────
+16. CURRENT STATUS / REMAINING DIAGNOSTIC STEP
+────────────────────────────────────────────────────────────────────────────────
+
+  As of last session, the API process (PID 15628) was still running with the
+  OLD binary. The diagnostic improvement (dev detail in 503 response body) has
+  been compiled into the source but the running process has not picked it up yet.
+
+  ACTION REQUIRED:
+    1. Stop both running processes (GOLISMart.API PID 15628, GOLISMart.Web PID 16204).
+    2. Rebuild:
+         dotnet build GOLISMart.API/GOLISMart.API.csproj
+         dotnet build GOLISMart.Web/GOLISMart.Web.csproj
+    3. Start both:
+         dotnet run --project GOLISMart.API  --launch-profile http
+         dotnet run --project GOLISMart.Web  --launch-profile http
+    4. Go to checkout → select address → select Pay Online → click Pay.
+    5. Open browser DevTools → Network → find the /checkout/razorpay/create-order
+       request → read the response body.
+    6. The error field will now contain:
+         "Payment gateway unavailable... [dev: HTTP <status>, code=<rzp_code>, inner=<msg>]"
+    7. Post the [dev: ...] portion to continue diagnosis.
+
+  KNOWN OUTSTANDING ISSUE:
+    The Razorpay API works (confirmed by direct PowerShell test → HTTP 200).
+    The failure is in the HttpClient call from the running API process.
+    Most likely cause based on evidence: the API process started before
+    appsettings.json was correctly configured OR a transient TLS issue.
+    The dev-detail diagnostic will confirm the exact exception type.
+
+================================================================================
+  END OF DOCUMENT
+================================================================================

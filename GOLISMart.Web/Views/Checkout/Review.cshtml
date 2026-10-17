@@ -293,28 +293,64 @@
                         <div class="mb-3">
                             <label class="form-label small fw-semibold mb-2">Payment Method</label>
                             <div class="d-flex flex-column gap-2" id="paymentMethods">
-                                <label class="d-flex align-items-center gap-2 p-2 border rounded" style="cursor:pointer;">
-                                    <input type="radio" name="paymentMethodSelect" value="COD" checked /> Cash on Delivery (COD)
+                                <label class="d-flex align-items-center gap-2 p-2 border rounded" style="cursor:pointer;" id="codLabel">
+                                    <input type="radio" name="paymentMethodSelect" id="pmCod" value="COD" checked />
+                                    <span>
+                                        <span class="fw-semibold">Cash on Delivery</span><br />
+                                        <small class="text-muted">Pay when your order arrives.</small>
+                                    </span>
                                 </label>
-                                <label class="d-flex align-items-center gap-2 p-2 border rounded" style="cursor:pointer;">
-                                    <input type="radio" name="paymentMethodSelect" value="UPI" /> UPI
+                                <label class="d-flex align-items-center gap-2 p-2 border rounded" style="cursor:pointer;" id="onlineLabel">
+                                    <input type="radio" name="paymentMethodSelect" id="pmOnline" value="Online" />
+                                    <span>
+                                        <span class="fw-semibold">Pay Online</span><br />
+                                        <small class="text-muted">UPI, Card, NetBanking, Wallet via Razorpay.</small>
+                                    </span>
                                 </label>
                             </div>
                         </div>
 
-                        @* Proceed to Place Order *@
-                        <form method="post" asp-controller="Checkout" asp-action="Confirm" id="confirmForm">
+                        @* COD confirm form *@
+                        <form method="post" asp-controller="Checkout" asp-action="Confirm"
+                              id="confirmForm" style="display:none;">
                             @Html.AntiForgeryToken()
                             <input type="hidden" name="addressId" value="@summary.Address.AddressId" />
-                            <input type="hidden" name="paymentMethod" id="paymentMethodInput" value="COD" />
+                            <input type="hidden" name="paymentMethod" value="COD" />
                             <button type="submit" class="btn btn-success w-100 fw-semibold" id="placeOrderBtn">
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                                      style="width:15px;height:15px;vertical-align:middle;margin-right:5px;">
                                     <path d="M5 12h14"/><path d="M12 5l7 7-7 7"/>
                                 </svg>
-                                Place Order
+                                Place Order (COD)
                             </button>
                         </form>
+
+                        @* Online payment button (Razorpay) *@
+                        <div id="rzpPaySection" style="display:none;">
+                            <button type="button" class="btn btn-success w-100 fw-semibold" id="rzpPayBtn">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                                     style="width:15px;height:15px;vertical-align:middle;margin-right:5px;">
+                                    <rect x="1" y="4" width="22" height="16" rx="2" ry="2"/>
+                                    <line x1="1" y1="10" x2="23" y2="10"/>
+                                </svg>
+                                Pay ₹@summary.FinalTotal.ToString("N2") Online
+                            </button>
+                        </div>
+
+                        @* Single always-visible primary action button *@
+                        <div id="primaryActionSection">
+                            <button type="button" class="btn btn-success w-100 fw-semibold" id="primaryBtn">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                                     style="width:15px;height:15px;vertical-align:middle;margin-right:5px;">
+                                    <path d="M5 12h14"/><path d="M12 5l7 7-7 7"/>
+                                </svg>
+                                Place Order (COD)
+                            </button>
+                        </div>
+
+                        @* Alert area for payment errors *@
+                        <div id="paymentError" class="alert alert-danger mt-2 d-none" role="alert"></div>
+                        <div id="paymentSuccess" class="alert alert-success mt-2 d-none" role="alert"></div>
 
                         <p class="text-muted text-center mt-2" style="font-size:.72rem;">
                             Prices and availability will be verified before your order is placed.
@@ -328,24 +364,283 @@
 </div>
 
 @section Scripts {
+<script src="https://checkout.razorpay.com/v1/checkout.js" defer></script>
 <script>
-    (function () {
-        // Sync payment method radio → hidden input
-        document.querySelectorAll('input[name="paymentMethodSelect"]').forEach(function (radio) {
-            radio.addEventListener('change', function () {
-                document.getElementById('paymentMethodInput').value = this.value;
-            });
-        });
+(function () {
+    'use strict';
 
-        // Prevent double-submit
-        var btn  = document.getElementById('placeOrderBtn');
-        var form = document.getElementById('confirmForm');
-        if (btn && form) {
-            form.addEventListener('submit', function () {
-                btn.disabled = true;
-                btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>Placing order…';
-            });
+    var isSubmitting = false;
+
+    // ── Antiforgery token (server-rendered into the COD form) ─────────────────
+    // The MVC proxy endpoints require [ValidateAntiForgeryToken].
+    // We read the token from the hidden field that @Html.AntiForgeryToken() emits
+    // inside #confirmForm.  This is safe: the token is not a secret and must be
+    // readable by JS to be sent in AJAX requests.
+    function getAntiforgeryToken() {
+        var el = document.querySelector('#confirmForm input[name="__RequestVerificationToken"]');
+        return el ? el.value : '';
+    }
+
+    // ── Helpers: show/hide error/success banners ──────────────────────────────
+    function showError(msg, redirectUrl) {
+        var el = document.getElementById('paymentError');
+        if (!el) return;
+        var html = escapeHtml(msg);
+        if (redirectUrl) {
+            html += ' <a href="' + escapeHtml(redirectUrl) + '" class="alert-link">Click here to continue.</a>';
         }
-    })();
+        el.innerHTML = html;
+        el.classList.remove('d-none');
+        document.getElementById('paymentSuccess').classList.add('d-none');
+    }
+
+    function showSuccess(msg) {
+        var el = document.getElementById('paymentSuccess');
+        if (!el) return;
+        el.textContent = msg;
+        el.classList.remove('d-none');
+        document.getElementById('paymentError').classList.add('d-none');
+    }
+
+    function clearAlerts() {
+        var errEl = document.getElementById('paymentError');
+        var sucEl = document.getElementById('paymentSuccess');
+        if (errEl) errEl.classList.add('d-none');
+        if (sucEl) sucEl.classList.add('d-none');
+    }
+
+    function escapeHtml(str) {
+        return String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    }
+
+    // ── Toggle between COD and Online views ───────────────────────────────────
+    // NOTE: updatePaymentUI() is called both on radio change AND from error/cancel
+    // recovery paths (after isSubmitting has already been reset to false and the
+    // button re-enabled).  We must NOT reset isSubmitting here — that is the
+    // caller's responsibility.  We also must not re-enable or re-disable the button
+    // unconditionally, so we only touch innerHTML when the button is not disabled.
+    function updatePaymentUI() {
+        var isCod       = document.getElementById('pmCod') && document.getElementById('pmCod').checked;
+        var primaryBtn  = document.getElementById('primaryBtn');
+        var confirmForm = document.getElementById('confirmForm');
+
+        clearAlerts();
+
+        // Only update the button label and handler when not mid-flight.
+        // (If it IS disabled the spinner label is already set correctly.)
+        if (primaryBtn.disabled) return;
+
+        if (isCod) {
+            var svgCod = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:15px;height:15px;vertical-align:middle;margin-right:5px;"><path d="M5 12h14"/><path d="M12 5l7 7-7 7"/></svg>';
+            primaryBtn.innerHTML = svgCod + ' Place Order (COD)';
+            primaryBtn.onclick = function () {
+                if (isSubmitting) return;
+                isSubmitting = true;
+                primaryBtn.disabled = true;
+                primaryBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>Placing order…';
+                confirmForm.submit();
+            };
+        } else {
+            var svgOnline = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:15px;height:15px;vertical-align:middle;margin-right:5px;"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>';
+            primaryBtn.innerHTML = svgOnline + ' Pay Online via Razorpay';
+            primaryBtn.onclick = initiateRazorpayPayment;
+        }
+    }
+
+    document.querySelectorAll('input[name="paymentMethodSelect"]').forEach(function (radio) {
+        radio.addEventListener('change', updatePaymentUI);
+    });
+
+    updatePaymentUI();
+
+    // ── Step 1: POST to MVC proxy — MVC reads session key + JWT server-side ───
+    // The browser sends only the antiforgery token.  The session key and JWT
+    // are never exposed to JavaScript.
+    function initiateRazorpayPayment() {
+        if (isSubmitting) return;
+
+        if (!window.Razorpay) {
+            showError('Payment gateway script failed to load. Please refresh the page and try again.');
+            return;
+        }
+
+        var aft = getAntiforgeryToken();
+        if (!aft) {
+            // Page may have been loaded stale (e.g. back button after logout).
+            showError('Page security token is missing. Please refresh the page and try again.', window.location.href);
+            return;
+        }
+
+        isSubmitting = true;
+        clearAlerts();
+
+        var primaryBtn = document.getElementById('primaryBtn');
+        primaryBtn.disabled = true;
+        primaryBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>Preparing payment…';
+
+        // Idempotency key: one per checkout page load, kept in sessionStorage so
+        // a retry re-uses the same key and the server returns the existing order.
+        var idempotencyKey = sessionStorage.getItem('gm_rzp_idem') || generateUuid();
+        sessionStorage.setItem('gm_rzp_idem', idempotencyKey);
+
+        fetch('/checkout/razorpay/create-order', {
+            method: 'POST',
+            credentials: 'same-origin',          // sends session + auth cookies
+            headers: {
+                'Content-Type': 'application/json',
+                'RequestVerificationToken': aft   // antiforgery header
+            },
+            body: JSON.stringify({ idempotencyKey: idempotencyKey })
+        })
+        .then(function (res) {
+            return res.text().then(function (text) {
+                var data;
+                try {
+                    data = JSON.parse(text);
+                } catch (e) {
+                    data = null;
+                }
+
+                if (res.status === 401) {
+                    var redirectUrl = (data && data.redirectUrl) || '/account/login?returnUrl=/checkout';
+                    throw { message: (data && data.message) || 'Your login session has expired. Please log in again.', redirectUrl: redirectUrl, isAuth: true };
+                }
+                if (res.status === 400) {
+                    var redir = (data && data.redirectUrl) || null;
+                    throw { message: (data && (data.message || data.error)) || 'Could not start payment.', redirectUrl: redir };
+                }
+                if (!res.ok) {
+                    var errorMsg = (data && (data.message || data.error)) || ('Payment service is currently unavailable (' + res.status + '). Please try again or choose Cash on Delivery.');
+                    throw { message: errorMsg, redirectUrl: (data && data.redirectUrl) || null };
+                }
+                return data;
+            });
+        })
+        .then(function (order) {
+            // order is the CreateRazorpayOrderResponse from the API
+            openRazorpayCheckout(order, aft);
+        })
+        .catch(function (err) {
+            isSubmitting = false;
+            primaryBtn.disabled = false;
+            updatePaymentUI();
+            showError(err.message || 'Unable to initiate payment. Please try again.', err.redirectUrl || null);
+        });
+    }
+
+    // ── Step 2: Open Razorpay Standard Checkout ───────────────────────────────
+    function openRazorpayCheckout(order, aft) {
+        var primaryBtn = document.getElementById('primaryBtn');
+
+        var options = {
+            key:         order.keyId,
+            amount:      order.amountPaise,
+            currency:    order.currency || 'INR',
+            order_id:    order.razorpayOrderId,
+            name:        'GOLIS Mart',
+            description: 'Order #' + order.internalOrderNumber,
+            prefill: {
+                name:    order.customerName  || '',
+                email:   order.customerEmail || '',
+                contact: (order.customerPhone || '').replace(/^\+91/, '').replace(/\D/g, '')
+            },
+            theme: { color: '#28a745' },
+
+            handler: function (response) {
+                // ── Step 3: Verify signature via MVC proxy ─────────────────────
+                primaryBtn.disabled = true;
+                primaryBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>Verifying payment…';
+
+                fetch('/checkout/razorpay/verify', {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'RequestVerificationToken': aft
+                    },
+                    body: JSON.stringify({
+                        razorpayOrderId:   response.razorpay_order_id,
+                        razorpayPaymentId: response.razorpay_payment_id,
+                        razorpaySignature: response.razorpay_signature
+                    })
+                })
+                .then(function (res) {
+                    return res.text().then(function (text) {
+                        var data;
+                        try {
+                            data = JSON.parse(text);
+                        } catch (e) {
+                            data = null;
+                        }
+
+                        if (res.status === 401) throw { message: 'Your session expired during payment. Please contact support if you were charged.', redirectUrl: '/account/login' };
+                        if (!res.ok) throw { message: (data && (data.message || data.error)) || 'Verification failed.' };
+                        return data;
+                    });
+                })
+                .then(function (result) {
+                    sessionStorage.removeItem('gm_rzp_idem');
+                    if (result.success) {
+                        showSuccess('Payment successful! Redirecting to your order…');
+                        setTimeout(function () {
+                            window.location.href = '/order/confirmation/' + result.internalOrderId;
+                        }, 1200);
+                    } else {
+                        isSubmitting = false;
+                        primaryBtn.disabled = false;
+                        updatePaymentUI();
+                        showError(result.message || 'Payment verification failed. Please contact support.');
+                    }
+                })
+                .catch(function (err) {
+                    isSubmitting = false;
+                    primaryBtn.disabled = false;
+                    updatePaymentUI();
+                    showError(err.message || 'Payment verification failed. Please try again or choose COD.', err.redirectUrl || null);
+                });
+            },
+
+            modal: {
+                ondismiss: function () {
+                    isSubmitting = false;
+                    primaryBtn.disabled = false;
+                    updatePaymentUI();
+                    showError('Payment was cancelled. You can try again or choose Cash on Delivery.');
+                }
+            }
+        };
+
+        try {
+            var rzp = new window.Razorpay(options);
+            rzp.on('payment.failed', function (response) {
+                isSubmitting = false;
+                primaryBtn.disabled = false;
+                updatePaymentUI();
+                var reason = (response.error && response.error.description) || 'Payment failed.';
+                showError('Payment failed: ' + reason + '. Please try again or choose Cash on Delivery.');
+            });
+            rzp.open();
+        } catch (e) {
+            isSubmitting = false;
+            primaryBtn.disabled = false;
+            updatePaymentUI();
+            showError('Could not open payment window. Please try again.');
+        }
+    }
+
+    // ── UUID v4 helper ─────────────────────────────────────────────────────────
+    function generateUuid() {
+        if (window.crypto && window.crypto.randomUUID) return window.crypto.randomUUID();
+        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+            var r = Math.random() * 16 | 0;
+            return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+        });
+    }
+
+})();
 </script>
 }

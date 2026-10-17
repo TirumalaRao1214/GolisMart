@@ -14,7 +14,7 @@ namespace GOLISMart.Web.Controllers.Admin;
 public class AdminReportsController(IAdminApiClient admin, ILogger<AdminReportsController> logger) : Controller
 {
     private const string TokenCookie = "GOLISMart_AuthToken";
-    private string? Token => HttpContext.Request.Cookies[TokenCookie];
+    private string? Token => HttpContext?.Request?.Cookies[TokenCookie];
 
     [HttpGet("admin/reports")]
     public async Task<IActionResult> Index(CancellationToken ct = default)

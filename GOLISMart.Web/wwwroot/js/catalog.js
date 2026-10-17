@@ -207,11 +207,200 @@
             });
         },
 
+        /**
+         * Live product search on the catalog page (debounced keyup/input + fetch).
+         * Uses document-level delegation so it is bound exactly once and keeps working
+         * after the grid partial or the whole page is swapped (SPA navigation).
+         */
+        initLiveSearch: function () {
+            if (live.bound) return;
+            live.bound = true;
+
+            var INPUT_SELECTOR = '#gm-catalog-search-input';
+
+            function onTyping(e) {
+                var input = e.target;
+                if (!input || !input.matches || !input.matches(INPUT_SELECTOR)) return;
+                var delay = parseInt(input.getAttribute('data-debounce-ms'), 10);
+                if (isNaN(delay) || delay < 0) delay = DEFAULT_DEBOUNCE_MS;
+                clearTimeout(live.timer);
+                live.timer = setTimeout(function () { runLiveSearch(input); }, delay);
+            }
+
+            document.addEventListener('keyup', onTyping);
+            document.addEventListener('input', onTyping);   // paste, clear (x) button, mobile keyboards
+
+            // Pressing Enter / the Search button runs the search immediately (no page reload)
+            document.addEventListener('submit', function (e) {
+                var form = e.target;
+                if (!form || !form.classList || !form.classList.contains('gm-catalog-search-form')) return;
+                var input = form.querySelector(INPUT_SELECTOR);
+                if (!input) return;
+                e.preventDefault();
+                clearTimeout(live.timer);
+                runLiveSearch(input);
+            });
+        },
+
         init: function () {
             GMCatalog.initSearchSuggestions();
             GMCatalog.initCatalogEvents();
+            GMCatalog.initLiveSearch();
         }
     };
+
+    // ─── Live search internals ──────────────────────────────────────────────
+    var DEFAULT_DEBOUNCE_MS = 300;
+    var live = { bound: false, timer: null, controller: null, seq: 0, pendingTerm: null };
+
+    function setLiveLoading(isLoading) {
+        var spinner = document.getElementById('gm-search-spinner');
+        var results = document.getElementById('gm-catalog-results');
+        if (spinner) spinner.classList.toggle('d-none', !isLoading);
+        if (results) {
+            results.style.opacity = isLoading ? '0.5' : '';
+            results.setAttribute('aria-busy', isLoading ? 'true' : 'false');
+        }
+    }
+
+    function showLiveError(message) {
+        var box = document.getElementById('gm-search-error');
+        var results = document.getElementById('gm-catalog-results');
+        if (box) {
+            box.textContent = message || '';
+            box.classList.toggle('d-none', !message);
+        }
+        // Hide stale results while an error is shown so they are not mistaken for the new search
+        if (results) results.classList.toggle('d-none', !!message);
+    }
+
+    function cancelInflight() {
+        live.seq++;
+        live.pendingTerm = null;
+        if (live.controller) {
+            live.controller.abort();
+            live.controller = null;
+        }
+    }
+
+    function syncFiltersAfterSearch(term) {
+        // Keep other forms/links in sync so category / availability / sort navigation keeps the term
+        document.querySelectorAll('.gm-catalog-filter-form [name="search"]').forEach(function (f) { f.value = term; });
+        document.querySelectorAll('.gm-filter-sidebar a.gm-filter-link').forEach(function (link) {
+            var u = new URL(link.href, window.location.origin);
+            if (term) u.searchParams.set('search', term); else u.searchParams.delete('search');
+            link.href = u.pathname + u.search;
+        });
+
+        // Reflect the term in the address bar (reload / share) without adding history entries
+        if (window.location.pathname.toLowerCase().indexOf('/catalog/category/') !== 0) {
+            var cur = new URL(window.location.href);
+            if (term) cur.searchParams.set('search', term); else cur.searchParams.delete('search');
+            cur.searchParams.delete('page');
+            cur.searchParams.delete('partial');
+            window.history.replaceState(window.history.state, '', cur.pathname + cur.search);
+        }
+    }
+
+    function applyLiveResults(html, term) {
+        var doc = new DOMParser().parseFromString(html, 'text/html');
+        var newResults = doc.getElementById('gm-catalog-results');
+        var newHeading = doc.getElementById('gm-catalog-heading');
+        var curResults = document.getElementById('gm-catalog-results');
+        var curHeading = document.getElementById('gm-catalog-heading');
+        if (!newResults || !curResults) throw new Error('Unexpected search response');
+
+        curResults.innerHTML = newResults.innerHTML;
+
+        if (newHeading && curHeading) {
+            if (window.location.pathname.toLowerCase().indexOf('/catalog/category/') === 0) {
+                // Keep the category title, refresh only the product count
+                var newCount = newHeading.querySelector('small');
+                var curCount = curHeading.querySelector('small');
+                if (newCount && curCount) curCount.textContent = newCount.textContent;
+            } else {
+                curHeading.innerHTML = newHeading.innerHTML;
+            }
+        }
+
+        curResults.classList.remove('gm-fade-in');
+        void curResults.offsetWidth;
+        curResults.classList.add('gm-fade-in');
+        curResults.addEventListener('animationend', function () {
+            curResults.classList.remove('gm-fade-in');
+        }, { once: true });
+
+        syncFiltersAfterSearch(term);
+    }
+
+    function runLiveSearch(input) {
+        var term = input.value.trim();
+
+        if (input.dataset.appliedTerm === undefined) {
+            input.dataset.appliedTerm = (input.defaultValue || '').trim();
+        }
+
+        // Already requesting this exact term
+        if (term === live.pendingTerm) return;
+
+        // Back to the term that is already displayed: drop any outdated in-flight request
+        if (term === input.dataset.appliedTerm) {
+            if (live.controller) {
+                cancelInflight();
+                setLiveLoading(false);
+            }
+            showLiveError('');
+            return;
+        }
+
+        // Cancel the previous request; its late response must never touch the UI
+        cancelInflight();
+        var mySeq = live.seq;
+        var controller = new AbortController();
+        live.controller = controller;
+        live.pendingTerm = term;
+
+        // Build the request from the current filter state (category / sort / availability)
+        var filterForm = document.querySelector('.gm-catalog-filter-form');
+        var searchForm = input.form;
+        var url = new URL((searchForm && searchForm.getAttribute('action')) || '/catalog', window.location.origin);
+        ['category', 'sortBy', 'sortOrder', 'inStock'].forEach(function (name) {
+            var field = (filterForm && filterForm.elements[name]) || (searchForm && searchForm.elements[name]);
+            if (field && field.value) url.searchParams.set(name, field.value);
+        });
+        if (term) url.searchParams.set('search', term);
+        url.searchParams.set('page', '1');
+        url.searchParams.set('partial', 'true');
+
+        showLiveError('');
+        setLiveLoading(true);
+
+        fetch(url.toString(), {
+            signal: controller.signal,
+            headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'text/html' }
+        })
+        .then(function (res) {
+            if (!res.ok) throw new Error('Search request failed (' + res.status + ')');
+            return res.text();
+        })
+        .then(function (html) {
+            if (mySeq !== live.seq || !input.isConnected) return;   // outdated response / page swapped
+            applyLiveResults(html, term);
+            input.dataset.appliedTerm = term;
+            live.controller = null;
+            live.pendingTerm = null;
+            setLiveLoading(false);
+        })
+        .catch(function (err) {
+            if (err && err.name === 'AbortError') return; // superseded by a newer request
+            if (mySeq !== live.seq || !input.isConnected) return;
+            console.error('Live search error:', err);
+            live.controller = null;
+            live.pendingTerm = null;
+            setLiveLoading(false);
+            showLiveError('We couldn\u2019t load search results. Please check your connection and try again.');
+        });
+    }
 
     function highlightSuggestion(items, index) {
         items.forEach(function (item, i) {

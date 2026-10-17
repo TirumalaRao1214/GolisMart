@@ -44,6 +44,7 @@ builder.Services.AddScoped<IDeliveryRepository, DeliveryRepository>();
 builder.Services.AddScoped<IOrderRepository, OrderRepository>();
 builder.Services.AddScoped<IAdminRepository, AdminRepository>();
 builder.Services.AddScoped<IDeliveryManagementRepository, DeliveryManagementRepository>();
+builder.Services.AddScoped<IPaymentRepository, PaymentRepository>();
 
 // ── Services ──────────────────────────────────────────────────────────────────
 builder.Services.AddScoped<ICatalogService, CatalogService>();
@@ -58,6 +59,13 @@ builder.Services.AddScoped<IAdminService, AdminService>();
 builder.Services.AddScoped<IDeliveryManagementService, DeliveryManagementService>();
 builder.Services.AddScoped<INotificationProvider, InAppNotificationProvider>();
 builder.Services.AddScoped<IPasswordHasher<ApplicationUser>, PasswordHasher<ApplicationUser>>();
+
+// ── Razorpay ──────────────────────────────────────────────────────────────────
+builder.Services.AddHttpClient<IRazorpayService, RazorpayService>(client =>
+{
+    client.BaseAddress = new Uri("https://api.razorpay.com/");
+    client.Timeout     = TimeSpan.FromSeconds(30);
+});
 
 // ── Geocoding ─────────────────────────────────────────────────────────────────
 builder.Services.AddMemoryCache();
@@ -165,15 +173,16 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI(options =>
         options.SwaggerEndpoint("/swagger/v1/swagger.json", "GOLIS Mart API v1"));
 }
-
-app.UseHttpsRedirection();
+else
+{
+    app.UseHttpsRedirection();
+}
 app.UseCors("WebClient");
 app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
-app.MapGet("/health", () => Results.Ok(new { status = "healthy" }));
 
 app.Run();
 

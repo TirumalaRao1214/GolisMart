@@ -19,9 +19,9 @@
 <div id="gm-catalog-content">
     @* Toolbar *@
     <div class="d-flex flex-wrap gap-2 align-items-center mb-4 p-3 rounded-3" style="background:var(--gm-neutral-50);border:1px solid var(--gm-border);">
-        <div class="me-auto">
+        <div class="me-auto" id="gm-catalog-heading" aria-live="polite">
             <h1 class="h5 fw-bold mb-0" style="color:var(--gm-text);">
-                @(catName ?? (string.IsNullOrEmpty(Model.SearchQuery) ? "All Products" : "Results for \"" + Html.Encode(Model.SearchQuery) + "\""))
+                @(catName ?? (string.IsNullOrEmpty(Model.SearchQuery) ? "All Products" : "Results for \"" + Model.SearchQuery + "\""))
             </h1>
             @if (Model.Products != null)
             {
@@ -45,20 +45,27 @@
                 @Html.Raw($"<option value='desc'{(Model.SortOrder=="desc"?" selected":"")} >&darr; Desc</option>")
             </select>
         </form>
-        @* Inline search *@
-        <form method="get" asp-controller="Catalog" asp-action="Index" class="d-flex gap-1 gm-catalog-search-form">
+        @* Inline search — live search is wired by catalog.js (debounced keyup/input + AJAX) *@
+        <form method="get" asp-controller="Catalog" asp-action="Index" class="d-flex gap-1 align-items-center gm-catalog-search-form">
             <input type="hidden" name="category"  value="@Model.SelectedCategory" />
             <input type="hidden" name="sortBy"    value="@Model.SortBy" />
             <input type="hidden" name="sortOrder" value="@Model.SortOrder" />
-            <input class="form-control form-control-sm" type="search"
-                   name="search" value="@Html.Encode(Model.SearchQuery)"
+            <input class="form-control form-control-sm" type="search" id="gm-catalog-search-input"
+                   name="search" value="@Model.SearchQuery" maxlength="100"
+                   data-debounce-ms="300" autocomplete="off" aria-label="Search products"
                    placeholder="Search…" style="max-width:180px;font-size:.82rem;" />
+            <span id="gm-search-spinner" class="spinner-border spinner-border-sm text-success d-none" role="status">
+                <span class="visually-hidden">Searching…</span>
+            </span>
             <button class="btn btn-sm btn-success" type="submit" aria-label="Search">
                 <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
             </button>
         </form>
     </div>
 
+    <div id="gm-search-error" class="alert alert-warning py-2 d-none" role="alert"></div>
+
+    <div id="gm-catalog-results">
     @if (Model.Products == null || Model.Products.Items.Count == 0)
     {
         <div class="gm-empty-state">
@@ -69,7 +76,7 @@
             <p class="mb-3">
                 @if (!string.IsNullOrEmpty(Model.SearchQuery))
                 {
-                    <span>No results for <strong>@Html.Encode(Model.SearchQuery)</strong>. Try a different keyword.</span>
+                    <span>No results for <strong>@Model.SearchQuery</strong>. Try a different keyword.</span>
                 }
                 else
                 {
@@ -95,4 +102,5 @@
             @await Html.PartialAsync("_Pagination")
         </div>
     }
+    </div>
 </div>

@@ -15,6 +15,8 @@ public class ProductsController : ControllerBase
     private readonly ICatalogService _catalog;
     private readonly ILogger<ProductsController> _logger;
 
+    private const int MaxSearchLength = 100;
+
     private static readonly HashSet<string> ValidSortFields =
         new(StringComparer.OrdinalIgnoreCase) { "name", "price", "offerprice", "createdat" };
 
@@ -48,6 +50,8 @@ public class ProductsController : ControllerBase
         [FromQuery] bool? inStock = null,
         CancellationToken ct = default)
     {
+        if (search is { Length: > MaxSearchLength })
+            return BadRequest(new ErrorResponse($"search must not exceed {MaxSearchLength} characters."));
         if (page < 1)
             return BadRequest(new ErrorResponse("page must be >= 1."));
         if (pageSize < 1 || pageSize > 100)

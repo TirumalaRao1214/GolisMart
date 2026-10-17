@@ -15,6 +15,8 @@ public class CatalogController : Controller
         _logger = logger;
     }
 
+    private const int MaxSearchLength = 100;
+
     private bool IsAjaxRequest() =>
         HttpContext != null && (
             string.Equals(Request.Headers["X-Requested-With"], "XMLHttpRequest", StringComparison.OrdinalIgnoreCase) ||
@@ -40,8 +42,11 @@ public class CatalogController : Controller
         bool? inStock = null,
         CancellationToken ct = default)
     {
-        // Sanitise pagination
+        // Sanitise pagination and search input
         page = Math.Max(1, page);
+        search = string.IsNullOrWhiteSpace(search) ? null : search.Trim();
+        if (search is { Length: > MaxSearchLength })
+            search = search[..MaxSearchLength];
 
         try
         {
@@ -53,6 +58,10 @@ public class CatalogController : Controller
                     sortBy: sortBy ?? "name", sortOrder: sortOrder ?? "asc",
                     inStock: inStock, ct: ct)
             ).WhenAll();
+
+            // Live search / grid refresh: never render a false "No products found" when the API call failed
+            if (products is null && IsPartialOnly())
+                return StatusCode(StatusCodes.Status503ServiceUnavailable);
 
             var vm = new ProductListViewModel
             {
@@ -74,10 +83,9 @@ public class CatalogController : Controller
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to load catalog from API");
-            var errorVm = new ProductListViewModel { ApiAvailable = false };
             if (IsPartialOnly())
-                return PartialView("_ProductGrid", errorVm);
-            return View(errorVm);
+                return StatusCode(StatusCodes.Status503ServiceUnavailable);
+            return View(new ProductListViewModel { ApiAvailable = false });
         }
     }
 
