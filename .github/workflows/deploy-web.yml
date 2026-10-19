@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       app_name:
-        description: 'Azure App Service Name for Web (e.g. golismart-web)'
+        description: 'Azure App Service Name for Web'
         required: true
-        default: 'golismart-web'
+        default: 'golismart-web-a9gkajajcgbydhha'
   push:
     branches:
       - main
@@ -39,6 +39,6 @@ jobs:
     - name: Deploy to Azure Web App
       uses: azure/webapps-deploy@v3
       with:
-        app-name: ${{ github.event.inputs.app_name || 'golismart-web' }}
+        app-name: ${{ github.event.inputs.app_name || 'golismart-web-a9gkajajcgbydhha' }}
         publish-profile: ${{ secrets.AZURE_WEB_PUBLISH_PROFILE }}
         package: ${{ github.workspace }}/publish/web

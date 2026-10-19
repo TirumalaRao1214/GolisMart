@@ -152,10 +152,18 @@ builder.Services.AddSwaggerGen(options =>
 });
 
 // ── CORS ──────────────────────────────────────────────────────────────────────
+var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
+    ?? new[]
+    {
+        "https://golismart-web-a9gkajajcgbydhha.centralindia-01.azurewebsites.net",
+        "https://localhost:5003",
+        "http://localhost:5002"
+    };
+
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("WebClient", policy =>
-        policy.WithOrigins("https://localhost:5003", "http://localhost:5002")
+        policy.WithOrigins(allowedOrigins)
               .AllowAnyHeader()
               .AllowAnyMethod()
               .AllowCredentials());
@@ -167,16 +175,19 @@ var app = builder.Build();
 
 app.UseMiddleware<ExceptionHandlingMiddleware>();
 
-if (app.Environment.IsDevelopment())
+// Enable Swagger in development and Azure App Service staging
+app.UseSwagger();
+app.UseSwaggerUI(options =>
 {
-    app.UseSwagger();
-    app.UseSwaggerUI(options =>
-        options.SwaggerEndpoint("/swagger/v1/swagger.json", "GOLIS Mart API v1"));
-}
-else
+    options.SwaggerEndpoint("/swagger/v1/swagger.json", "GOLIS Mart API v1");
+    options.RoutePrefix = "swagger";
+});
+
+if (!app.Environment.IsDevelopment())
 {
     app.UseHttpsRedirection();
 }
+
 app.UseCors("WebClient");
 app.UseRateLimiter();
 app.UseAuthentication();
