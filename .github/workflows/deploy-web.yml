@@ -1,0 +1,44 @@
+name: Deploy Web to Azure App Service
+
+on:
+  workflow_dispatch:
+    inputs:
+      app_name:
+        description: 'Azure App Service Name for Web (e.g. golismart-web)'
+        required: true
+        default: 'golismart-web'
+  push:
+    branches:
+      - main
+    paths:
+      - 'GOLISMart.Web/**'
+      - '.github/workflows/deploy-web.yml'
+
+jobs:
+  build-and-deploy:
+    runs-on: windows-latest
+
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+
+    - name: Setup .NET SDK
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '10.0.x'
+
+    - name: Restore Dependencies
+      run: dotnet restore GOLISMart.Web/GOLISMart.Web.csproj
+
+    - name: Build Web
+      run: dotnet build GOLISMart.Web/GOLISMart.Web.csproj --configuration Release --no-restore
+
+    - name: Publish Web
+      run: dotnet publish GOLISMart.Web/GOLISMart.Web.csproj --configuration Release -o ${{ github.workspace }}/publish/web
+
+    - name: Deploy to Azure Web App
+      uses: azure/webapps-deploy@v3
+      with:
+        app-name: ${{ github.event.inputs.app_name || 'golismart-web' }}
+        publish-profile: ${{ secrets.AZURE_WEB_PUBLISH_PROFILE }}
+        package: ${{ github.workspace }}/publish/web

@@ -1,0 +1,44 @@
+name: Deploy API to Azure App Service
+
+on:
+  workflow_dispatch:
+    inputs:
+      app_name:
+        description: 'Azure App Service Name for API (e.g. golismart-api)'
+        required: true
+        default: 'golismart-api'
+  push:
+    branches:
+      - main
+    paths:
+      - 'GOLISMart.API/**'
+      - '.github/workflows/deploy-api.yml'
+
+jobs:
+  build-and-deploy:
+    runs-on: windows-latest
+
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+
+    - name: Setup .NET SDK
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '10.0.x'
+
+    - name: Restore Dependencies
+      run: dotnet restore GOLISMart.API/GOLISMart.API.csproj
+
+    - name: Build API
+      run: dotnet build GOLISMart.API/GOLISMart.API.csproj --configuration Release --no-restore
+
+    - name: Publish API
+      run: dotnet publish GOLISMart.API/GOLISMart.API.csproj --configuration Release -o ${{ github.workspace }}/publish/api
+
+    - name: Deploy to Azure Web App
+      uses: azure/webapps-deploy@v3
+      with:
+        app-name: ${{ github.event.inputs.app_name || 'golismart-api' }}
+        publish-profile: ${{ secrets.AZURE_API_PUBLISH_PROFILE }}
+        package: ${{ github.workspace }}/publish/api
